@@ -10,7 +10,8 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "node src/lib/run-checks.mjs"
+		"test": "node src/lib/run-checks.mjs",
+		"tauri": "tauri"
 	},
 	"devDependencies": {
 		"@fontsource-variable/dm-sans": "^5.3.0",
@@ -26,6 +27,7 @@
 		"@sveltejs/kit": "^2.69.1",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/vite": "^4.3.0",
+		"@tauri-apps/cli": "^2.12.4",
 		"bits-ui": "^2.18.1",
 		"clsx": "^2.1.1",
 		"layerchart": "^2.8.0",

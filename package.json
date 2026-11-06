@@ -1,0 +1,12 @@
+{
+  "name": "tin-music",
+  "private": true,
+  "description": "Native desktop Navidrome (Subsonic) client with Svelte 5 and libmpv",
+  "scripts": {
+    "dev": "npm --prefix ui run tauri -- dev",
+    "build": "npm --prefix ui run tauri -- build",
+    "ui:dev": "npm --prefix ui run dev",
+    "ui:build": "npm --prefix ui run build",
+    "tauri": "npm --prefix ui run tauri --"
+  }
+}
