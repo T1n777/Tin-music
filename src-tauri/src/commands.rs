@@ -1251,9 +1251,10 @@ pub async fn get_playlist(
         return local_playlist_page(&state, &id);
     }
     let client = state.subsonic_client().await?;
-    let mut page = client.get_playlist(&id).await.map_err(|e| e.to_string())?;
+    let clean_id = id.strip_prefix("VL").unwrap_or(&id);
+    let mut page = client.get_playlist(clean_id).await.map_err(|e| e.to_string())?;
     // Alongside Navidrome's own thumbnail, not over it: the dialog offers to drop the custom one.
-    page.cover = custom_cover(&state, &id);
+    page.cover = custom_cover(&state, clean_id).or_else(|| custom_cover(&state, &id));
     Ok(page)
 }
 
@@ -1627,8 +1628,10 @@ pub async fn add_to_playlist(
         return Ok(true);
     }
     let client = state.subsonic_client().await?;
-    client.add_to_playlist_single(&playlist_id, &video_id).await.map_err(|e| e.to_string())?;
+    let clean_id = playlist_id.strip_prefix("VL").unwrap_or(&playlist_id);
+    client.add_to_playlist_single(clean_id, &video_id).await.map_err(|e| e.to_string())?;
     state.db.add_playlist_track(&playlist_id, &video_id);
+    state.db.add_playlist_track(clean_id, &video_id);
     Ok(true)
 }
 
@@ -1644,10 +1647,12 @@ pub async fn remove_from_playlist(
         return remove_local_rows(&state, &playlist_id, &[row]);
     }
     let client = state.subsonic_client().await?;
+    let clean_id = playlist_id.strip_prefix("VL").unwrap_or(&playlist_id);
     if let Ok(idx) = set_video_id.parse::<usize>() {
-        let _ = client.remove_from_playlist_single(&playlist_id, idx).await;
+        let _ = client.remove_from_playlist_single(clean_id, idx).await;
     }
     state.db.remove_playlist_track(&playlist_id, &video_id);
+    state.db.remove_playlist_track(clean_id, &video_id);
     Ok(())
 }
 
@@ -1666,11 +1671,13 @@ pub async fn remove_many_from_playlist(
         return remove_local_rows(&state, &playlist_id, &rows);
     }
     let client = state.subsonic_client().await?;
+    let clean_id = playlist_id.strip_prefix("VL").unwrap_or(&playlist_id);
     for (video_id, set_video_id) in &tracks {
         if let Ok(idx) = set_video_id.parse::<usize>() {
-            let _ = client.remove_from_playlist_single(&playlist_id, idx).await;
+            let _ = client.remove_from_playlist_single(clean_id, idx).await;
         }
         state.db.remove_playlist_track(&playlist_id, video_id);
+        state.db.remove_playlist_track(clean_id, video_id);
     }
     Ok(())
 }
@@ -1738,8 +1745,9 @@ pub async fn edit_playlist_details(
             .map_err(db_err);
     }
     let client = state.subsonic_client().await?;
+    let clean_id = playlist_id.strip_prefix("VL").unwrap_or(&playlist_id);
     client
-        .update_playlist(&playlist_id, name.as_deref(), description.as_deref(), &[], &[])
+        .update_playlist(clean_id, name.as_deref(), description.as_deref(), &[], &[])
         .await
         .map_err(|e| e.to_string())
 }
@@ -1941,8 +1949,10 @@ pub async fn delete_playlist(state: St<'_>, playlist_id: String) -> Result<(), S
         return Ok(());
     }
     let client = state.subsonic_client().await?;
-    client.delete_playlist(&playlist_id).await.map_err(|e| e.to_string())?;
+    let clean_id = playlist_id.strip_prefix("VL").unwrap_or(&playlist_id);
+    client.delete_playlist(clean_id).await.map_err(|e| e.to_string())?;
     state.db.forget_playlist(&playlist_id);
+    state.db.forget_playlist(clean_id);
     Ok(())
 }
 

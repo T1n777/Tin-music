@@ -10,20 +10,17 @@
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import {
 		Add01Icon,
-		CloudSyncIcon,
 		CloudUploadIcon,
 		DriveIcon,
 		MusicNote01Icon,
 		MusicNoteSquare02Icon,
 		Playlist02Icon,
-		SpotifyIcon,
 		SquareStackIcon,
 		UserCheck01Icon,
 		UserSharingIcon
 	} from '@hugeicons/core-free-icons';
 	import { Button } from '$lib/components/ui/button';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import * as Tooltip from '$lib/components/ui/tooltip';
 	import LibrarySongs from '$lib/components/LibrarySongs.svelte';
 	import LocalMusic from '$lib/components/LocalMusic.svelte';
 	import MediaCard from '$lib/components/MediaCard.svelte';
@@ -38,14 +35,11 @@
 		loadLibrary,
 		loadLibraryExtras,
 		loadUploadAlbums,
-		openNewPlaylist,
-		syncSavedToYouTube
+		openNewPlaylist
 	} from '$lib/player.svelte';
-	import { mergeSaved, unsynced } from '$lib/personal';
+	import { mergeSaved } from '$lib/personal';
 	import { reveal } from '$lib/reveal.svelte';
 	import { t } from '$lib/i18n.svelte';
-	import { openImport } from '$lib/import.svelte';
-	import ExperimentalBadge from '$lib/components/ExperimentalBadge.svelte';
 
 	// `?tab=local` so anything that sends you back here (an album whose files were deleted) lands
 	// on the tab you came from instead of a sign-in prompt.
@@ -84,10 +78,6 @@
 	const error = $derived(library.error ?? library.extrasError);
 	// Only the empty states differ: signed out there is no account library to be missing yet.
 	const signedOut = $derived(!auth.account?.signedIn);
-	// What the sync button has left to push. Synced rows stay in the local library (they are what
-	// the user still has after signing out), so counting all of `personal.saved` would nag forever.
-	const toSync = $derived(unsynced(personal));
-
 	onMount(load);
 
 	// Only when the tab is opened: most accounts have no uploads at all, so this stays off the
@@ -101,26 +91,9 @@
 		loadLibrary(true);
 		loadLibraryExtras(true);
 	}
-
-	let syncing = $state(false);
-	async function sync() {
-		if (syncing) return;
-		syncing = true;
-		const n = toSync.length;
-		try {
-			const { synced, failed } = await syncSavedToYouTube();
-			if (failed && synced) toast(t('toasts.synced_partial', { synced, total: n, failed }));
-			else if (failed) toast.error(t('toasts.synced_none', { failed }));
-			else toast.success(t('toasts.synced_all', { count: synced }));
-		} catch (e) {
-			toast.error(String(e));
-		} finally {
-			syncing = false;
-		}
-	}
 </script>
 
-{#snippet grid(items: BrowseItem[], empty: string, rv: ReturnType<typeof reveal>, nudge = false)}
+{#snippet grid(items: BrowseItem[], empty: string, rv: ReturnType<typeof reveal>)}
 	{#if items.length}
 		<div class="card-grid content-in">
 			{#each items.slice(0, rv.count(items.length)) as item (item.kind + item.id)}
@@ -131,23 +104,6 @@
 		{#if rv.more(items.length)}<div {@attach rv.sentinel}></div>{/if}
 	{:else}
 		<p class="text-sm text-muted-foreground">{empty}</p>
-		<!-- An empty library is most likely a new one, and a new one is often someone coming from
-		     Spotify (#375). Gone as soon as there is anything here, so it never needs dismissing. -->
-		{#if nudge}
-		<button
-			class="mt-4 flex max-w-md cursor-pointer items-center gap-4 rounded-2xl border p-4 text-left transition-colors hover:bg-accent/10"
-			onclick={() => openImport()}
-		>
-			<HugeiconsIcon icon={SpotifyIcon} class="h-8 w-8 shrink-0 text-primary" />
-			<span>
-				<span class="flex items-center gap-2 text-sm font-medium">
-					{t('import.nudge_title')}
-					<ExperimentalBadge />
-				</span>
-				<span class="block text-xs text-muted-foreground">{t('import.nudge_desc')}</span>
-			</span>
-		</button>
-		{/if}
 	{/if}
 {/snippet}
 
@@ -155,59 +111,6 @@
 	<div class="mb-6 flex items-center justify-between">
 		<h1 class="font-heading text-2xl font-bold">{t('library.title')}</h1>
 		<div class="flex items-center gap-2">
-			<!-- Only with something to push: saves made before signing in, which live on this
-			     machine until this button puts them on the account. -->
-			{#if auth.account?.signedIn && toSync.length}
-				<!-- A cloud glyph with a number on it says nothing about what pressing it does, and
-				     that's a write to someone's YouTube account. Hence a real tooltip rather than the
-				     `title` this app uses elsewhere: it has to be read before the click, not after a
-				     second of hovering. `child` keeps our own Button as the trigger element. -->
-				<Tooltip.Provider delayDuration={150}>
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<Button
-									{...props}
-									variant="outline"
-									size="icon-sm"
-									onclick={sync}
-									disabled={syncing}
-									aria-label={t('a11y.sync_to_ytm', { count: toSync.length })}
-								>
-									<span class="relative">
-										<HugeiconsIcon
-											icon={CloudSyncIcon}
-											class="h-4 w-4 {syncing ? 'animate-pulse' : ''}"
-										/>
-										<!-- ring-background so the count reads over the icon's stroke (as in
-										     Titlebar). -->
-										<span
-											class="absolute -right-2 -top-1.5 min-w-3.5 rounded-full bg-accent px-[3px] text-[9px] font-semibold leading-[0.875rem] text-accent-foreground ring-[1.5px] ring-background"
-										>
-											{toSync.length}
-										</span>
-									</span>
-								</Button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content side="bottom">
-							{syncing
-								? t('common.loading')
-								: t('library.sync_idle_tooltip', { count: toSync.length })}
-						</Tooltip.Content>
-					</Tooltip.Root>
-				</Tooltip.Provider>
-			{/if}
-			<Button
-				variant="outline"
-				size="sm"
-				class="gap-2"
-				title={t('import.button_tooltip')}
-				onclick={() => openImport()}
-			>
-				<HugeiconsIcon icon={SpotifyIcon} class="h-4 w-4" /> {t('import.button')}
-				<ExperimentalBadge />
-			</Button>
 			<!-- Signed out too: a playlist can live on this machine with no account (#251). -->
 			<Button variant="outline" size="sm" class="gap-2" onclick={() => openNewPlaylist()}>
 				<HugeiconsIcon icon={Add01Icon} class="h-4 w-4" /> {t('nav.new_playlist')}
@@ -332,8 +235,7 @@
 					{@render grid(
 						all,
 						signedOut ? t('library.empty_signed_out') : t('library.empty'),
-						rvAll,
-						true
+						rvAll
 					)}
 				{/if}
 			</Tabs.Content>
@@ -342,8 +244,7 @@
 					{@render grid(
 						playlists,
 						t('library.no_saved_playlists'),
-						rvPlaylists,
-						true
+						rvPlaylists
 					)}
 				{/if}
 			</Tabs.Content>

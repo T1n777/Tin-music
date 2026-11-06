@@ -286,14 +286,12 @@ export async function createLibraryPlaylist(title: string, local: boolean): Prom
 			}
 		);
 	}
-	// YouTube's library browse is eventually-consistent and won't include a brand-new playlist for a
-	// few seconds, so surface it immediately instead of refetching.
-	const browseId = id.startsWith('VL') ? id : `VL${id}`;
-	// The owner line in YouTube's own format ("<owner> • N tracks"), because that is what
-	// `ownedByUser` reads to know this one is yours before the library reloads and says so itself.
+	const browseId = id;
+	// The owner line in "<owner> • N tracks" format.
 	const subtitle = auth.account?.name ? `${auth.account.name} \u2022 0 tracks` : undefined;
 	const item: BrowseItem = { kind: 'playlist', id: browseId, title, subtitle };
 	library.items = [item, ...library.items];
+	loadLibrary(true);
 	return item;
 }
 

@@ -1026,11 +1026,11 @@
 		},
 		"new_playlist": {
 			"where": "Where to keep it",
-			"account": "YouTube Music",
-			"account_desc": "On your account, wherever you sign in",
+			"account": "Navidrome Server",
+			"account_desc": "On your Navidrome server, synced with your library",
 			"device": "This device",
-			"device_desc": "No account needed, it stays on this computer",
-			"device_only": "It stays on this computer, no account needed. Sign in to make playlists on YouTube Music instead.",
+			"device_desc": "Local only, stays on this computer",
+			"device_only": "It stays on this computer. Connect to Navidrome to make playlists on your server instead.",
 			"local_files": "Songs from your computer can only go in a playlist on this device."
 		}
 	},

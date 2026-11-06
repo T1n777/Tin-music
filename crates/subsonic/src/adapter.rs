@@ -296,9 +296,12 @@ pub fn playlist_with_songs_to_page(
     let items = p
         .entry
         .iter()
-        .map(|s| {
+        .enumerate()
+        .map(|(idx, s)| {
             let thumb = s.cover_art.as_deref().map(&cover_url_fn);
-            child_to_song_item(s, thumb)
+            let mut song = child_to_song_item(s, thumb);
+            song.set_video_id = Some(idx.to_string());
+            song
         })
         .collect();
 
