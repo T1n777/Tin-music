@@ -10,7 +10,6 @@
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import {
 		Add01Icon,
-		CloudUploadIcon,
 		DriveIcon,
 		MusicNote01Icon,
 		MusicNoteSquare02Icon,
@@ -34,7 +33,6 @@
 		library,
 		loadLibrary,
 		loadLibraryExtras,
-		loadUploadAlbums,
 		openNewPlaylist
 	} from '$lib/player.svelte';
 	import { mergeSaved } from '$lib/personal';
@@ -47,9 +45,6 @@
 	$effect(() => {
 		lastTab = tab;
 	});
-	// Uploads splits three ways (all / songs / albums): YouTube Music takes uploaded albums too, and
-	// they are a card grid rather than rows, so they can't just join the track list.
-	let uploadTab = $state('all');
 	// Artists splits like YouTube Music's: the artists behind your songs, or the ones you subscribe
 	// to. Only the second can be taken out of the library (an unsubscribe); the first leaves with
 	// its songs.
@@ -72,20 +67,11 @@
 	const rvAlbums = reveal();
 	const rvArtists = reveal();
 	const rvSubscriptions = reveal();
-	const rvUploadsAll = reveal();
-	const rvUploadAlbums = reveal();
 	const loading = $derived((library.loading || library.extrasLoading) && !all.length);
 	const error = $derived(library.error ?? library.extrasError);
 	// Only the empty states differ: signed out there is no account library to be missing yet.
 	const signedOut = $derived(!auth.account?.signedIn);
 	onMount(load);
-
-	// Only when the tab is opened: most accounts have no uploads at all, so this stays off the
-	// Library's own load. `untrack` because the loader writes the very state it reads to decide
-	// whether to run, which would otherwise re-trigger this effect forever.
-	$effect(() => {
-		if (tab === 'uploads') untrack(() => loadUploadAlbums());
-	});
 
 	function load() {
 		loadLibrary(true);
@@ -137,9 +123,6 @@
 			<Tabs.Trigger value="songs">
 				<HugeiconsIcon icon={MusicNote01Icon} class="h-4 w-4" /> {t('library.songs_tab')}
 			</Tabs.Trigger>
-			<Tabs.Trigger value="uploads">
-				<HugeiconsIcon icon={CloudUploadIcon} class="h-4 w-4" /> {t('library.uploads_tab')}
-			</Tabs.Trigger>
 			<Tabs.Trigger value="local">
 				<HugeiconsIcon icon={DriveIcon} class="h-4 w-4" /> {t('library.local_tab')}
 			</Tabs.Trigger>
@@ -148,8 +131,8 @@
 		     renders every one and hides the inactive ones. Left alone, opening Library builds each card twice
 		     (once for All, once for its own tab) and mounts the whole Local tab, disk scan included,
 		     for a panel you cannot see. -->
-		<!-- Songs, Uploads and Local stand apart: two are track lists rather than card grids, the
-		     third needs neither an account nor a connection, and the states below fit none of them. -->
+		<!-- Songs and Local stand apart: one is a track list rather than card grid, the
+		     other needs neither an account nor a connection, and the states below fit none of them. -->
 		<Tabs.Content value="songs">
 			{#if tab === 'songs'}
 				{#if signedOut}
@@ -159,65 +142,8 @@
 				{/if}
 			{/if}
 		</Tabs.Content>
-		<Tabs.Content value="uploads">
-			{#if tab === 'uploads'}
-				{#if signedOut}
-					<p class="text-sm text-muted-foreground">{t('library.uploads_signed_out')}</p>
-				{:else}
-					<!-- `line` rather than the pill row above it: two identical pill rows stacked read as
-					     one control drawn twice. -->
-					<Tabs.Root bind:value={uploadTab}>
-						<Tabs.List variant="line" class="mb-4">
-							<Tabs.Trigger value="all">
-								<HugeiconsIcon icon={SquareStackIcon} class="h-4 w-4" /> {t('common.all')}
-							</Tabs.Trigger>
-							<Tabs.Trigger value="songs">
-								<HugeiconsIcon icon={MusicNote01Icon} class="h-4 w-4" /> {t('common.songs')}
-							</Tabs.Trigger>
-							<Tabs.Trigger value="albums">
-								<HugeiconsIcon icon={MusicNoteSquare02Icon} class="h-4 w-4" /> {t('common.albums')}
-							</Tabs.Trigger>
-						</Tabs.List>
-						<Tabs.Content value="all">
-							{#if uploadTab === 'all'}
-								<LibrarySongs uploads limit={20} onSeeAll={() => (uploadTab = 'songs')} />
-								{#if library.uploadAlbums.length}
-									<h2 class="mb-3 mt-8 font-heading text-lg font-semibold">{t('common.albums')}</h2>
-									{@render grid(library.uploadAlbums, '', rvUploadsAll)}
-								{/if}
-							{/if}
-						</Tabs.Content>
-						<Tabs.Content value="songs">
-							{#if uploadTab === 'songs'}<LibrarySongs uploads />{/if}
-						</Tabs.Content>
-						<Tabs.Content value="albums">
-							{#if uploadTab === 'albums'}
-								{#if library.uploadAlbumsLoading && !library.uploadAlbums.length}
-									<div class="card-grid">
-										{#each Array(6) as _, i (i)}
-											<MediaCardSkeleton />
-										{/each}
-									</div>
-								{:else if library.uploadAlbumsError && !library.uploadAlbums.length}
-									<ErrorState
-										message={library.uploadAlbumsError}
-										onRetry={() => loadUploadAlbums(true)}
-									/>
-								{:else}
-									{@render grid(
-										library.uploadAlbums,
-										t('library.no_upload_albums'),
-										rvUploadAlbums
-									)}
-								{/if}
-							{/if}
-						</Tabs.Content>
-					</Tabs.Root>
-				{/if}
-			{/if}
-		</Tabs.Content>
 		<Tabs.Content value="local">{#if tab === 'local'}<LocalMusic />{/if}</Tabs.Content>
-		{#if tab === 'local' || tab === 'songs' || tab === 'uploads'}
+		{#if tab === 'local' || tab === 'songs'}
 			<!-- nothing else: the grid states below have no bearing on these three -->
 		{:else if loading}
 			<div class="card-grid">
