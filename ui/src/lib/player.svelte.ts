@@ -1214,6 +1214,7 @@ export const ui = $state({
 	addPending: false, // one playlist batch at a time, even after the picker closes
 	share: null as BrowseItem | null, // the share modal's target
 	toast: null as Toast | null,
+	serverLoginOpen: false, // the Navidrome server connection modal
 	settingsOpen: false, // the settings modal
 	tempoPitchOpen: false, // playback effects stay open when the current track menu is replaced
 	settingsFocus: null as 'lyrics' | 'scrobbling' | null, // a section to open settings on, once
@@ -1257,6 +1258,10 @@ export function refreshLanguage() {
 	loadLibrary(true);
 	if (library.extrasLoaded) loadLibraryExtras(true);
 	if (library.uploadAlbumsLoaded) loadUploadAlbums(true);
+}
+
+export function openServerLogin() {
+	ui.serverLoginOpen = true;
 }
 
 export function openChannelPicker(required = false) {

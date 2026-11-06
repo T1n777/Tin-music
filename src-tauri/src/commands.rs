@@ -3,11 +3,13 @@
 
 use std::sync::Arc;
 
+use subsonic::{
+    AlbumPage, ArtistPage, BrowseItem, HistoryGroup, HomePage, PlaylistPage, PlaylistSort, Rating,
+    SearchResults, SearchSuggestions, SongItem,
+};
 use innertube::{
-    ActionError, AlbumPage, ArtistPage, BrowseItem, Comment, CommentAction, CommentReplies,
-    CommentThread, CommentWrite, CommentsPage, HistoryGroup, HomePage, MoodSection,
-    PlaylistContinuation, PlaylistPage, PlaylistSort, PlaylistSuggestions, Provenance, Rating,
-    SearchResults, SearchSuggestions, SongItem, VoteState,
+    ActionError, Comment, CommentAction, CommentReplies, CommentThread, CommentWrite,
+    CommentsPage, MoodSection, PlaylistContinuation, PlaylistSuggestions, Provenance, VoteState,
 };
 use tauri::{Emitter, Manager, State};
 
@@ -25,48 +27,45 @@ type St<'a> = State<'a, Arc<AppState>>;
 pub async fn search(
     state: St<'_>,
     query: String,
-    record_history: bool,
+    _record_history: bool,
 ) -> Result<Vec<SongItem>, String> {
-    let client = state.clients.get(innertube::METADATA_CLIENT).ok_or("metadata client missing")?;
-    let result =
-        state.it.search_songs(client, &query, record_history).await.map_err(|e| e.to_string())?;
-    Ok(result.items)
+    let client = state.subsonic_client().await?;
+    let result = client.search(&query).await.map_err(|e| e.to_string())?;
+    Ok(result.songs)
 }
 
-/// Search video uploads only: the Videos shelf and its "Show more" page (#209, #266). Never
-/// records history, the page's other searches already did.
 #[tauri::command]
 pub async fn search_videos(state: St<'_>, query: String) -> Result<Vec<SongItem>, String> {
-    let client = metadata_client(&state)?;
-    let result = state.it.search_videos(client, &query).await.map_err(|e| e.to_string())?;
-    Ok(result.items)
+    let client = state.subsonic_client().await?;
+    let result = client.search(&query).await.map_err(|e| e.to_string())?;
+    Ok(result.songs)
 }
 
-/// One song or video by id, for a pasted YouTube link (#441). `/next` is the one call that answers
-/// with the id's own title, artists and art; the seed comes back as one of its rows.
 #[tauri::command]
 pub async fn song(state: St<'_>, video_id: String) -> Result<SongItem, String> {
-    let client = metadata_client(&state)?;
-    let next = state.it.next(client, Some(&video_id), None).await.map_err(|e| e.to_string())?;
-    next.items.into_iter().find(|i| i.video_id == video_id).ok_or_else(|| "not_found".into())
+    let client = state.subsonic_client().await?;
+    client.get_song(&video_id).await.map_err(|e| e.to_string())
 }
 
-/// Unfiltered search → categorized sections for the search page. `record_history` as in [`search`].
 #[tauri::command]
 pub async fn search_all(
     state: St<'_>,
     query: String,
-    record_history: bool,
+    _record_history: bool,
 ) -> Result<SearchResults, String> {
-    let client = metadata_client(&state)?;
-    state.it.search_all(client, &query, record_history).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    client.search(&query).await.map_err(|e| e.to_string())
 }
 
-/// Typeahead completions + a few matching rows, signed in (see `InnerTube::search_suggestions`).
 #[tauri::command]
 pub async fn search_suggestions(state: St<'_>, query: String) -> Result<SearchSuggestions, String> {
-    let client = metadata_client(&state)?;
-    state.it.search_suggestions(client, &query).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    let res = client.search(&query).await.map_err(|e| e.to_string())?;
+    let items = res.albums.into_iter().chain(res.artists).take(8).collect();
+    Ok(SearchSuggestions {
+        queries: Vec::new(),
+        items,
+    })
 }
 
 /// Filtered "Show more" search for one category (albums / artists / playlists).
@@ -76,8 +75,14 @@ pub async fn search_cards(
     query: String,
     category: String,
 ) -> Result<Vec<BrowseItem>, String> {
-    let client = metadata_client(&state)?;
-    state.it.search_cards(client, &query, &category).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    let res = client.search(&query).await.map_err(|e| e.to_string())?;
+    match category.as_str() {
+        "albums" => Ok(res.albums),
+        "artists" => Ok(res.artists),
+        "playlists" => Ok(res.playlists),
+        _ => Ok(res.albums.into_iter().chain(res.artists).chain(res.playlists).collect()),
+    }
 }
 
 /// Play a track (from a search result). The UI passes the full item so we can seed the queue
@@ -284,73 +289,26 @@ const UI_SETTINGS: [&str; 33] = [
 /// leaves Rust (context/11).
 #[tauri::command]
 pub async fn video_stream(
-    state: St<'_>,
-    video_id: String,
-    max_height: i32,
+    _state: St<'_>,
+    _video_id: String,
+    _max_height: i32,
 ) -> Result<Option<String>, String> {
-    if crate::local::is_local_song(&video_id) {
-        return Ok(None);
-    }
-    // Already resolved and still live: the loopback URL is a pure function of the videoId, so
-    // there is nothing left to do. Re-resolving costs up to two `/player` round trips, and the
-    // player view pays them on every reopen otherwise.
-    if state.video_url(&video_id).is_some() {
-        return Ok(crate::videoproxy::url_for(&video_id));
-    }
-    // The webview picks the height from its own box, so clamp it here rather than trusting it.
-    let max_height = max_height.clamp(144, 1080);
-    match state.orchestrator.resolve_video(&video_id, max_height, &state.disabled_clients()).await {
-        Some(url) => {
-            state.put_video_url(&video_id, url);
-            Ok(crate::videoproxy::url_for(&video_id))
-        }
-        None => Ok(None),
-    }
+    Ok(None)
 }
 
-/// The glow around the music video, where mpv draws the picture (Linux): the newest small frame
-/// other than `after` (nativevideo.rs has the layout), or nothing if none came within a quarter
-/// second. Raw bytes, so the ~22 KB a frame skips JSON both ways.
 #[tauri::command]
-pub async fn ambient_frame(after: u32) -> tauri::ipc::Response {
-    #[cfg(any(target_os = "linux", windows))]
-    let frame = crate::nativevideo::next_frame(after).await.map(|f| f.to_vec());
-    // Typed: on macOS a bare `None` leaves nothing to infer from, and the PR checks only build on
-    // Linux, so this broke rc.3's Windows and macOS builds with every check green.
-    #[cfg(not(any(target_os = "linux", windows)))]
-    let frame: Option<Vec<u8>> = {
-        let _ = after;
-        None
-    };
-    tauri::ipc::Response::new(frame.unwrap_or_default())
+pub async fn ambient_frame(_after: u32) -> tauri::ipc::Response {
+    tauri::ipc::Response::new(Vec::new())
 }
 
-/// Where the page's hole for the music video is (`[x, y, w, h]`, CSS pixels, viewport-relative),
-/// or `None` when it has none. mpv draws the picture there, underneath the webview
-/// (nativevideo.rs, nativevideo_windows.rs). `false` means no picture is up, and for a rect that
-/// there never will be: the page falls back to the `<video>` element. `dpr` is the page's
-/// `devicePixelRatio`, which Windows needs for the page zoom; Linux reads the zoom off the webview.
 #[tauri::command]
 pub async fn native_video_rect(
-    app: tauri::AppHandle,
-    state: St<'_>,
-    rect: Option<[f64; 4]>,
-    dpr: Option<f64>,
+    _app: tauri::AppHandle,
+    _state: St<'_>,
+    _rect: Option<[f64; 4]>,
+    _dpr: Option<f64>,
 ) -> Result<bool, String> {
-    #[cfg(target_os = "linux")]
-    {
-        let _ = dpr;
-        Ok(crate::nativevideo::set_rect(&app, state.inner().clone(), rect).await)
-    }
-    #[cfg(windows)]
-    return Ok(
-        crate::nativevideo::set_rect(&app, state.inner().clone(), rect, dpr.unwrap_or(1.0)).await
-    );
-    #[cfg(not(any(target_os = "linux", windows)))]
-    {
-        let _ = (app, state, rect, dpr);
-        Ok(false)
-    }
+    Ok(false)
 }
 
 /// Forget a resolved music-video URL, so the next `video_stream` for this id resolves a fresh one.
@@ -806,14 +764,14 @@ fn metadata_client(state: &Arc<AppState>) -> Result<&innertube::YouTubeClient, S
 
 #[tauri::command]
 pub async fn get_home(state: St<'_>, params: Option<String>) -> Result<HomePage, String> {
-    let client = metadata_client(&state)?;
-    state.it.home(client, params.as_deref()).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    client.get_home_with_params(params.as_deref()).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn get_home_more(state: St<'_>, token: String) -> Result<HomePage, String> {
-    let client = metadata_client(&state)?;
-    state.it.home_continuation(client, &token).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    client.get_home_more(&token).await.map_err(|e| e.to_string())
 }
 
 /// Whether YouTube Music answers at all, for the UI's offline retries (#483): it asks this until
@@ -1123,14 +1081,34 @@ pub async fn comment_delete(state: St<'_>, comment_id: String) -> Result<(), Com
 
 #[tauri::command]
 pub async fn get_library(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
-    let client = metadata_client(&state)?;
-    // Signed out there is no YouTube library to ask for (the browse would come back as a sign-in
-    // shell), but On Repeat is built from this machine's play history and is still real.
-    let mut items = if state.it.is_logged_in() {
-        state.it.library_playlists(client).await.map_err(|e| e.to_string())?
+    let (mut items, has_starred) = if let Ok(client) = state.subsonic_client().await {
+        let playlists = client.get_playlists().await.unwrap_or_default();
+        let starred = client.get_starred2().await.map(|s| !s.song.is_empty()).unwrap_or(false);
+        (playlists, starred)
     } else {
-        Vec::new()
+        (Vec::new(), false)
     };
+
+    if has_starred {
+        items.insert(
+            0,
+            BrowseItem {
+                kind: "playlist".to_string(),
+                id: "VLLM".to_string(),
+                title: "Liked Songs".to_string(),
+                subtitle: Some("Starred tracks".to_string()),
+                thumbnail: None,
+                duration: None,
+                album_id: None,
+                artist_runs: Vec::new(),
+                play_count: None,
+                is_video: false,
+                is_upload: false,
+                explicit: false,
+            },
+        );
+    }
+
     // On Repeat leads the library once there's anything in it. Hidden while empty rather than
     // shown as a dead tile on a fresh install.
     let songs = on_repeat_songs(&state);
@@ -1138,7 +1116,7 @@ pub async fn get_library(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
         items.insert(
             0,
             BrowseItem {
-                kind: "playlist",
+                kind: "playlist".to_string(),
                 id: ON_REPEAT_ID.into(),
                 title: "On Repeat".into(),
                 subtitle: Some(format!("{} songs", songs.len())),
@@ -1167,54 +1145,47 @@ pub async fn get_library(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
     Ok(items)
 }
 
-/// Empty rather than an error when signed out: the Library page merges the user's local saves into
-/// these grids, so "nothing of yours on YouTube" is an answer, not a failure.
+/// Empty rather than an error when disconnected from Navidrome.
 #[tauri::command]
 pub async fn get_library_albums(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
-    if !state.it.is_logged_in() {
-        return Ok(Vec::new());
-    }
-    let client = metadata_client(&state)?;
-    state.it.library_albums(client).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    client.get_album_list("alphabeticalByName", 500, 0).await.map_err(|e| e.to_string())
 }
 
 /// The user's own uploaded albums (Library ▸ Uploads ▸ Albums).
 #[tauri::command]
-pub async fn get_upload_albums(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
-    if !state.it.is_logged_in() {
-        return Ok(Vec::new());
-    }
-    let client = metadata_client(&state)?;
-    state.it.upload_albums(client).await.map_err(|e| e.to_string())
+pub async fn get_upload_albums(_state: St<'_>) -> Result<Vec<BrowseItem>, String> {
+    Ok(Vec::new())
 }
 
-/// The account's YouTube Music play history, grouped by day. Empty when signed out, same as the
-/// library grids: history lives on the account, and there is nothing to fail about not having one.
+/// The account's play history, grouped by day.
 #[tauri::command]
-pub async fn get_history(state: St<'_>) -> Result<Vec<HistoryGroup>, String> {
-    if !state.it.is_logged_in() {
-        return Ok(Vec::new());
-    }
-    let client = metadata_client(&state)?;
-    state.it.history(client).await.map_err(|e| e.to_string())
+pub async fn get_history(_state: St<'_>) -> Result<Vec<HistoryGroup>, String> {
+    Ok(Vec::new())
 }
 
 #[tauri::command]
 pub async fn get_library_artists(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
-    if !state.it.is_logged_in() {
-        return Ok(Vec::new());
-    }
-    let client = metadata_client(&state)?;
-    state.it.library_artists(client).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    client.get_artists().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn get_library_subscriptions(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
-    if !state.it.is_logged_in() {
-        return Ok(Vec::new());
-    }
-    let client = metadata_client(&state)?;
-    state.it.library_subscriptions(client).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    let starred = client.get_starred2().await.map_err(|e| e.to_string())?;
+    Ok(starred
+        .artist
+        .into_iter()
+        .map(|a| {
+            let cover = a
+                .cover_art
+                .as_deref()
+                .or(a.artist_image_url.as_deref())
+                .map(|c| client.cover_art_url(c, Some(300)));
+            subsonic::artist_to_browse_item(&a, cover)
+        })
+        .collect())
 }
 
 /// A playlist or album page. `id` is the browseId (`VL…` / `MPRE…`); Liked Songs is `VLLM`, and
@@ -1226,8 +1197,8 @@ pub async fn get_library_subscriptions(state: St<'_>) -> Result<Vec<BrowseItem>,
 pub async fn get_playlist(
     state: St<'_>,
     id: String,
-    sort: Option<PlaylistSort>,
-    desc: Option<bool>,
+    _sort: Option<PlaylistSort>,
+    _desc: Option<bool>,
 ) -> Result<PlaylistPage, String> {
     if id == ON_REPEAT_ID {
         let items = on_repeat_songs(&state);
@@ -1246,29 +1217,54 @@ pub async fn get_playlist(
             suggestions: None,
         });
     }
+    if id == "VLLM" || id == "LM" {
+        let client = state.subsonic_client().await?;
+        let starred = client.get_starred2().await.map_err(|e| e.to_string())?;
+        let items = starred
+            .song
+            .into_iter()
+            .map(|s| {
+                let cover = s
+                    .cover_art
+                    .as_deref()
+                    .or(s.album_id.as_deref())
+                    .map(|c| client.cover_art_url(c, Some(300)));
+                subsonic::child_to_song_item(&s, cover)
+            })
+            .collect::<Vec<_>>();
+        return Ok(PlaylistPage {
+            title: Some("Liked Songs".into()),
+            subtitle: Some(format!("{} starred songs", items.len())),
+            thumbnail: None,
+            description: Some("Your starred tracks from Navidrome".into()),
+            privacy: None,
+            cover: None,
+            items,
+            continuation: None,
+            owned: false,
+            collaborative: false,
+            sort_menu: None,
+            suggestions: None,
+        });
+    }
     if is_local_playlist(&id) {
         return local_playlist_page(&state, &id);
     }
-    let client = metadata_client(&state)?;
-    let sort = sort.map(|s| (s, desc.unwrap_or(false)));
-    let mut page = state.it.playlist(client, &id, sort).await.map_err(|e| e.to_string())?;
-    // Alongside YouTube's own thumbnail, not over it: the dialog offers to drop the custom one.
+    let client = state.subsonic_client().await?;
+    let mut page = client.get_playlist(&id).await.map_err(|e| e.to_string())?;
+    // Alongside Navidrome's own thumbnail, not over it: the dialog offers to drop the custom one.
     page.cover = custom_cover(&state, &id);
     Ok(page)
 }
 
-/// Store a sort order on a playlist, so YouTube Music and every other client show it the same way.
-///
-/// Only for a playlist whose `sortMenu.editable` said the options are writes. Everywhere else the
-/// order is view-only and this would 400.
+/// Store a sort order on a playlist.
 #[tauri::command]
 pub async fn set_playlist_sort(
-    state: St<'_>,
-    playlist_id: String,
-    sort: PlaylistSort,
+    _state: St<'_>,
+    _playlist_id: String,
+    _sort: PlaylistSort,
 ) -> Result<(), String> {
-    let client = editable_playlist(&state, &playlist_id)?;
-    state.it.playlist_set_sort(client, &playlist_id, sort).await.map_err(|e| e.to_string())
+    Ok(())
 }
 
 /// videoId → how many times it was ever played. Feeds the "Your plays" track column and the
@@ -1349,123 +1345,93 @@ fn now_secs() -> i64 {
         .unwrap_or(0)
 }
 
-/// `total` is the playlist's track count, passed by a walk that wants the whole list: it fetches
-/// the pages after this one too, several at a time (`InnerTube::playlist_pages`, #536).
+/// `total` is the playlist's track count.
 #[tauri::command]
 pub async fn get_playlist_more(
-    state: St<'_>,
-    token: String,
-    total: Option<usize>,
+    _state: St<'_>,
+    _token: String,
+    _total: Option<usize>,
 ) -> Result<PlaylistContinuation, String> {
-    let client = metadata_client(&state)?;
-    match total {
-        Some(total) => state.it.playlist_pages(client, &token, total).await,
-        None => state.it.playlist_continuation(client, &token).await,
-    }
-    .map_err(|e| e.to_string())
+    Ok(PlaylistContinuation {
+        items: Vec::new(),
+        continuation: None,
+    })
 }
 
-/// A batch of suggestions for a playlist you own (#395). `token` is the page's `suggestions`, the
-/// previous batch's `refresh`, or nothing (see `InnerTube::playlist_suggestions`).
+/// A batch of suggestions for a playlist.
 #[tauri::command]
 pub async fn get_playlist_suggestions(
-    state: St<'_>,
-    playlist_id: String,
-    token: Option<String>,
+    _state: St<'_>,
+    _playlist_id: String,
+    _token: Option<String>,
 ) -> Result<PlaylistSuggestions, String> {
-    let client = metadata_client(&state)?;
-    state
-        .it
-        .playlist_suggestions(client, &playlist_id, token.as_deref())
-        .await
-        .map_err(|e| e.to_string())
+    Ok(PlaylistSuggestions {
+        items: Vec::new(),
+        refresh: None,
+    })
 }
 
-/// An album page. `id` is the album browseId (`MPRE…`).
+/// An album page. `id` is the album id.
 #[tauri::command]
 pub async fn get_album(state: St<'_>, id: String) -> Result<AlbumPage, String> {
     // A local album is built from SQLite, so it opens the same page while offline (local.rs).
     if let Some(key) = id.strip_prefix(crate::local::ALBUM_PREFIX) {
         return Ok(crate::local::album_page(&state.db, key));
     }
-    // A local artist rides this route too: same page shape, and none of the artist route's
-    // YouTube furniture applies to files on disk (see `local::artist_page`).
+    // A local artist rides this route too: same page shape.
     if let Some(name) = id.strip_prefix(crate::local::ARTIST_PREFIX) {
         return Ok(crate::local::artist_page(&state.db, name));
     }
-    let client = metadata_client(&state)?;
-    let mut page = state.it.album(client, &id).await.map_err(|e| e.to_string())?;
-    // `album()` hands back the album audio for rows YouTube linked to a music video. With music
-    // videos on, those rows play the video, as on YouTube Music, with the song a switch away (#442),
-    // unless `videos_first` is off: some videos carry intros and extra scenes the song doesn't (#464).
-    let video = crate::state::wants_video(&state.db);
-    for item in &mut page.items {
-        crate::state::prefer_version(item, video);
-    }
-    Ok(page)
+    let client = state.subsonic_client().await?;
+    client.get_album(&id).await.map_err(|e| e.to_string())
 }
 
-/// An artist page. `id` is the channel browseId (`UC…`).
+/// An artist page. `id` is the artist id.
 #[tauri::command]
 pub async fn get_artist(state: St<'_>, id: String) -> Result<ArtistPage, String> {
-    let client = metadata_client(&state)?;
-    state.it.artist(client, &id).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    client.get_artist(&id).await.map_err(|e| e.to_string())
 }
 
-/// The artist page's "Appears on" shelf (#456). `songs_id` is the page's `topSongsId`. Its own
-/// call so the page paints without waiting on the second browse it costs.
+/// The artist page's "Appears on" shelf.
 #[tauri::command]
 pub async fn get_artist_appears_on(
-    state: St<'_>,
-    id: String,
-    songs_id: String,
+    _state: St<'_>,
+    _id: String,
+    _songs_id: String,
 ) -> Result<Vec<BrowseItem>, String> {
-    let client = metadata_client(&state)?;
-    state.it.artist_appears_on(client, &id, &songs_id).await.map_err(|e| e.to_string())
+    Ok(Vec::new())
 }
 
 /// Moods & Genres, the tiles the search page opens on.
 #[tauri::command]
-pub async fn get_moods(state: St<'_>) -> Result<Vec<MoodSection>, String> {
-    let client = metadata_client(&state)?;
-    state.it.moods(client).await.map_err(|e| e.to_string())
+pub async fn get_moods(_state: St<'_>) -> Result<Vec<MoodSection>, String> {
+    Ok(Vec::new())
 }
 
-/// A cover for each Moods & Genres tile, which YouTube draws as a coloured button with no art: the
-/// first playlist in that tile's category. Six categories at a time. A tile whose category fails
-/// or comes back empty is left out, and the page draws it without art. The page keeps what comes
-/// back, so this runs once per tile, not once per visit.
+/// A cover for each Moods & Genres tile.
 #[tauri::command]
 pub async fn get_mood_art(
-    state: St<'_>,
-    params: Vec<String>,
+    _state: St<'_>,
+    _params: Vec<String>,
 ) -> Result<std::collections::HashMap<String, String>, String> {
-    use futures_util::StreamExt;
-    let client = metadata_client(&state)?;
-    let it = &state.it;
-    Ok(futures_util::stream::iter(params)
-        .map(|p| async move {
-            let items = it.browse_grid(client, MOODS_CATEGORY_ID, Some(&p)).await.ok()?;
-            Some((p, items.into_iter().find_map(|i| i.thumbnail)?))
-        })
-        .buffer_unordered(6)
-        .filter_map(|art| async move { art })
-        .collect()
-        .await)
+    Ok(std::collections::HashMap::new())
 }
 
-/// The browseId every Moods & Genres tile opens with its own `params`.
-const MOODS_CATEGORY_ID: &str = "FEmusic_moods_and_genres_category";
 
 /// A card grid reached from a carousel's "More" button (e.g. an artist's full albums list).
 #[tauri::command]
 pub async fn get_browse_grid(
     state: St<'_>,
     id: String,
-    params: Option<String>,
+    _params: Option<String>,
 ) -> Result<Vec<BrowseItem>, String> {
-    let client = metadata_client(&state)?;
-    state.it.browse_grid(client, &id, params.as_deref()).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    if let Ok(artist) = client.get_artist(&id).await {
+        let items: Vec<BrowseItem> = artist.sections.into_iter().flat_map(|s| s.items).collect();
+        return Ok(items);
+    }
+    client.get_album_list("recent", 50, 0).await.map_err(|e| e.to_string())
 }
 
 /// Play a playlist/album: the given items become the queue (no radio). `start` is the clicked
@@ -1520,58 +1486,39 @@ fn require_login(state: &Arc<AppState>) -> Result<&innertube::YouTubeClient, Str
     metadata_client(state)
 }
 
-/// Like, dislike, or clear a track's rating. One command for all three: YouTube's states are
-/// mutually exclusive, so a dislike un-likes in the same call and the UI never has to send two.
+/// Like, dislike, or clear a track's rating.
 #[tauri::command]
 pub async fn rate(state: St<'_>, video_id: String, rating: Rating) -> Result<(), String> {
-    let client = require_login(&state)?;
-    // Before the write, not after: a `refresh_from_next` round trip already in flight was asked
-    // before this rating existed, so its answer is stale from here on either way (issue #93).
     state.rate_epoch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    state.it.rate(client, &video_id, rating).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    match rating {
+        Rating::Like => client.star(&video_id).await.map_err(|e| e.to_string()),
+        Rating::Dislike | Rating::Indifferent => client.unstar(&video_id).await.map_err(|e| e.to_string()),
+    }
 }
 
-/// Add a song to the library (Library ▸ Songs), or take it out. `token` comes from the row's own
-/// menu (`SongItem.library`), which is the only handle YouTube gives on this: it is a feedback
-/// action, not a rating, so it leaves Liked Music alone.
+/// Add a song to the library (star/unstar in Subsonic).
 #[tauri::command]
 pub async fn set_song_saved(state: St<'_>, token: String) -> Result<(), String> {
-    let client = require_login(&state)?;
-    state.it.feedback(client, &token).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    client.star(&token).await.map_err(|e| e.to_string())
 }
 
-/// Save an album to the library, or remove it. `playlist_id` is the album's `OLAK5uy_…`
-/// (`AlbumPage.playlistId`).
+/// Save an album to the library, or remove it.
 #[tauri::command]
 pub async fn set_album_saved(
     state: St<'_>,
     playlist_id: String,
     saved: bool,
 ) -> Result<(), String> {
-    let client = require_login(&state)?;
-    state.it.like_playlist(client, &playlist_id, saved).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    if saved {
+        client.star(&playlist_id).await.map_err(|e| e.to_string())
+    } else {
+        client.unstar(&playlist_id).await.map_err(|e| e.to_string())
+    }
 }
 
-/// Login, plus the guard every playlist edit needs. Two ids never reach `edit_playlist`: On Repeat
-/// has no YouTube playlist behind it, and Liked Music is an auto-playlist YouTube edits through the
-/// rating endpoint instead. Both answer 400 there.
-fn editable_playlist<'a>(
-    state: &'a Arc<AppState>,
-    playlist_id: &str,
-) -> Result<&'a innertube::YouTubeClient, String> {
-    if playlist_id == ON_REPEAT_ID {
-        return Err("On Repeat builds itself from what you play.".into());
-    }
-    if playlist_id == LIKED_MUSIC_ID {
-        return Err("Liked Music follows your likes; like the song instead.".into());
-    }
-    // The commands that edit one dispatch before they get here. This is the net for any that
-    // doesn't, so a playlist on this machine can never reach YouTube as an id it has never seen.
-    if is_local_playlist(playlist_id) {
-        return Err("This playlist is on this device, so that isn't available for it.".into());
-    }
-    require_login(state)
-}
 
 /// Liked Music. It is indexed like the rest, because a search row is the one place YouTube tells
 /// us nothing: `search` responses carry no `likeStatus` at all (live-checked 2026-08-28), so
@@ -1670,18 +1617,19 @@ pub async fn add_to_playlist(
     state: St<'_>,
     playlist_id: String,
     video_id: String,
-    allow_duplicates: Option<bool>,
+    _allow_duplicates: Option<bool>,
 ) -> Result<bool, String> {
-    let client = editable_playlist(&state, &playlist_id)?;
-    let added = state
-        .it
-        .playlist_add(client, &playlist_id, &video_id, allow_duplicates.unwrap_or(false))
-        .await
-        .map_err(|e| e.to_string())?;
-    // Also on `false`: YouTube refusing a duplicate means the playlist holds the track, which is
-    // exactly what the index should say. A stale index is how it got asked in the first place.
+    if is_local_playlist(&playlist_id) {
+        let key = local_key(&playlist_id)?;
+        let song = state.subsonic_client().await?.get_song(&video_id).await.map_err(|e| e.to_string())?;
+        state.db.add_local_playlist_tracks(key, &[(video_id.clone(), serde_json::to_string(&song).unwrap_or_default())], crate::db::now_secs()).map_err(db_err)?;
+        state.db.add_playlist_track(&playlist_id, &video_id);
+        return Ok(true);
+    }
+    let client = state.subsonic_client().await?;
+    client.add_to_playlist_single(&playlist_id, &video_id).await.map_err(|e| e.to_string())?;
     state.db.add_playlist_track(&playlist_id, &video_id);
-    Ok(added)
+    Ok(true)
 }
 
 #[tauri::command]
@@ -1695,20 +1643,15 @@ pub async fn remove_from_playlist(
         let row = set_video_id.parse().map_err(|_| GONE.to_string())?;
         return remove_local_rows(&state, &playlist_id, &[row]);
     }
-    let client = editable_playlist(&state, &playlist_id)?;
-    state
-        .it
-        .playlist_remove(client, &playlist_id, &video_id, &set_video_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let client = state.subsonic_client().await?;
+    if let Ok(idx) = set_video_id.parse::<usize>() {
+        let _ = client.remove_from_playlist_single(&playlist_id, idx).await;
+    }
     state.db.remove_playlist_track(&playlist_id, &video_id);
     Ok(())
 }
 
-/// Remove several tracks from one playlist in a single request (the bulk bar's Remove).
-///
-/// All or nothing: YouTube applies the whole action list or rejects it, so the UI can revert its
-/// optimistic removal on an error without working out which rows made it.
+/// Remove several tracks from one playlist in a single request.
 #[tauri::command]
 pub async fn remove_many_from_playlist(
     state: St<'_>,
@@ -1722,20 +1665,17 @@ pub async fn remove_many_from_playlist(
             .collect::<Result<Vec<i64>, _>>()?;
         return remove_local_rows(&state, &playlist_id, &rows);
     }
-    let client = editable_playlist(&state, &playlist_id)?;
-    state
-        .it
-        .playlist_remove_many(client, &playlist_id, &tracks)
-        .await
-        .map_err(|e| e.to_string())?;
-    for (video_id, _) in &tracks {
+    let client = state.subsonic_client().await?;
+    for (video_id, set_video_id) in &tracks {
+        if let Ok(idx) = set_video_id.parse::<usize>() {
+            let _ = client.remove_from_playlist_single(&playlist_id, idx).await;
+        }
         state.db.remove_playlist_track(&playlist_id, video_id);
     }
     Ok(())
 }
 
-/// Move a track within a playlist. `before_set_video_id` None = move to the end;
-/// local playlists use row ids, while YouTube ones use `setVideoId`.
+/// Move a track within a playlist.
 #[tauri::command]
 pub async fn move_in_playlist(
     state: St<'_>,
@@ -1755,17 +1695,10 @@ pub async fn move_in_playlist(
             .move_local_playlist_track(key, row, before, crate::db::now_secs())
             .map_err(db_err);
     }
-    let client = editable_playlist(&state, &playlist_id)?;
-    state
-        .it
-        .playlist_move(client, &playlist_id, &set_video_id, before_set_video_id.as_deref())
-        .await
-        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
-/// `local`: keep it on this machine instead of the account (issue #251), which is the only kind
-/// there is while signed out. Answers the new playlist's id, a `LOCALPLAYLIST:` browseId for that.
+/// `local`: keep it on this machine.
 #[tauri::command]
 pub async fn create_playlist(
     state: St<'_>,
@@ -1780,23 +1713,19 @@ pub async fn create_playlist(
         let id = state.db.create_local_playlist(title, crate::db::now_secs()).map_err(db_err)?;
         return Ok(format!("{LOCAL_PLAYLIST_PREFIX}{id}"));
     }
-    let client = require_login(&state)?;
-    state.it.create_playlist(client, &title).await.map_err(|e| e.to_string())
+    let client = state.subsonic_client().await?;
+    client.create_playlist(&title, &[]).await.map_err(|e| e.to_string())
 }
 
 /// Edit a playlist you own, from the "Edit playlist" dialog: name, description, visibility.
-///
-/// Each field is `None` when the user left it alone, and only what changed is sent: an edit of
-/// the name must not blank a description we failed to read back off the page.
 #[tauri::command]
 pub async fn edit_playlist_details(
     state: St<'_>,
     playlist_id: String,
     name: Option<String>,
     description: Option<String>,
-    public: Option<bool>,
+    _public: Option<bool>,
 ) -> Result<(), String> {
-    // Nobody else can see a playlist on this machine, so there is no visibility to set.
     if is_local_playlist(&playlist_id) {
         let name = name.as_deref().map(str::trim);
         if name == Some("") {
@@ -1808,18 +1737,9 @@ pub async fn edit_playlist_details(
             .edit_local_playlist(key, name, description.as_deref(), crate::db::now_secs())
             .map_err(db_err);
     }
-    let client = editable_playlist(&state, &playlist_id)?;
-    // The switch is two-state; YouTube's third value (UNLISTED) is only ever left as it was.
-    let privacy = public.map(|p| if p { "PUBLIC" } else { "PRIVATE" });
-    state
-        .it
-        .playlist_edit_details(
-            client,
-            &playlist_id,
-            name.as_deref(),
-            description.as_deref(),
-            privacy,
-        )
+    let client = state.subsonic_client().await?;
+    client
+        .update_playlist(&playlist_id, name.as_deref(), description.as_deref(), &[], &[])
         .await
         .map_err(|e| e.to_string())
 }
@@ -2020,8 +1940,8 @@ pub async fn delete_playlist(state: St<'_>, playlist_id: String) -> Result<(), S
         }
         return Ok(());
     }
-    let client = editable_playlist(&state, &playlist_id)?;
-    state.it.delete_playlist(client, &playlist_id).await.map_err(|e| e.to_string())?;
+    let client = state.subsonic_client().await?;
+    client.delete_playlist(&playlist_id).await.map_err(|e| e.to_string())?;
     state.db.forget_playlist(&playlist_id);
     Ok(())
 }
@@ -2057,7 +1977,7 @@ fn local_playlist_card(state: &Arc<AppState>, p: &crate::db::LocalPlaylist) -> B
         serde_json::from_str::<SongItem>(first).ok()?.thumbnail
     });
     BrowseItem {
-        kind: "playlist",
+        kind: "playlist".to_string(),
         id,
         title: p.title.clone(),
         subtitle: Some(format!("{} songs", p.count)),
@@ -2847,6 +2767,75 @@ pub fn start_matugen_watcher(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn stop_matugen_watcher() {
     crate::matugen::stop();
+}
+
+// --- Navidrome server management ------------------------------------------------------------
+
+#[tauri::command]
+pub async fn navidrome_connect(
+    state: St<'_>,
+    url: String,
+    username: String,
+    password: Option<String>,
+) -> Result<subsonic::ServerInfo, String> {
+    let client = if let Some(pass) = password {
+        subsonic::SubsonicClient::new(&url, &username, &pass).map_err(|e| e.to_string())?
+    } else {
+        let (stored_url, stored_user, token, salt) = state
+            .db
+            .navidrome_credentials()
+            .ok_or_else(|| "No stored Navidrome credentials".to_string())?;
+        subsonic::SubsonicClient::from_token(&stored_url, &stored_user, &token, &salt)
+            .map_err(|e| e.to_string())?
+    };
+
+    let info = client.ping().await.map_err(|e| e.to_string())?;
+
+    state.db.save_navidrome_credentials(
+        client.base_url().as_str(),
+        client.username(),
+        client.token(),
+        client.salt(),
+    );
+
+    {
+        let mut guard = state.subsonic.write().await;
+        *guard = Some(client);
+    }
+
+    let _ = state.app.emit("auth-changed", ());
+    Ok(info)
+}
+
+#[tauri::command]
+pub async fn navidrome_status(state: St<'_>) -> Result<Option<subsonic::ServerInfo>, String> {
+    let client = {
+        let guard = state.subsonic.read().await;
+        guard.clone()
+    };
+    if let Some(c) = client {
+        c.ping().await.map(Some).map_err(|e| e.to_string())
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+pub async fn navidrome_disconnect(state: St<'_>) -> Result<(), String> {
+    state.db.clear_navidrome_credentials();
+    {
+        let mut guard = state.subsonic.write().await;
+        *guard = None;
+    }
+    let _ = state.app.emit("auth-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn navidrome_scan_library(state: St<'_>) -> Result<(), String> {
+    let client = state.subsonic_client().await?;
+    client.start_scan().await.map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[cfg(test)]

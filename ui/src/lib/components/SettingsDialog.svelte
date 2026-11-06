@@ -17,7 +17,8 @@
 		Globe02Icon,
 		ArrowDown01Icon,
 		Alert02Icon,
-		LinkSquare02Icon
+		LinkSquare02Icon,
+		ServerIcon
 	} from '@hugeicons/core-free-icons';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -29,7 +30,7 @@
 	import { HELP_COMBO } from '$lib/shortcuts';
 	import { copyText } from '$lib/clipboard';
 	import * as api from '$lib/api';
-	import { blocked, prefs, refreshLanguage, setAutoplay, ui, toast, unblockArtist } from '$lib/player.svelte';
+	import { auth, blocked, loadLibrary, openServerLogin, prefs, refreshLanguage, refreshView, setAutoplay, ui, toast, unblockArtist } from '$lib/player.svelte';
 	import { win } from '$lib/win.svelte';
 	import { lt } from '$lib/lt.svelte';
 	import AppearanceSettings from '$lib/components/AppearanceSettings.svelte';
@@ -52,6 +53,7 @@
 	import LanguagePicker from '$lib/components/LanguagePicker.svelte';
 
 	type TabId =
+		| 'navidrome'
 		| 'general'
 		| 'themes'
 		| 'playback'
@@ -61,6 +63,7 @@
 		| 'data'
 		| 'about';
 	const TABS = $derived<{ id: TabId; label: string; hint: string; icon: typeof Settings02Icon }[]>([
+		{ id: 'navidrome', label: 'Navidrome Server', hint: 'Server connection and library sync', icon: ServerIcon },
 		{ id: 'general', label: t('settings.tabs.general'), hint: t('settings.tabs.general_hint'), icon: Settings02Icon },
 		{ id: 'themes', label: t('settings.tabs.themes'), hint: t('settings.tabs.themes_hint'), icon: PaintBoardIcon },
 		{ id: 'playback', label: t('settings.tabs.playback'), hint: t('settings.tabs.playback_hint'), icon: PlayCircleIcon },
@@ -79,6 +82,42 @@
 	const CARD = 'divide-y divide-border/60 overflow-hidden rounded-xl border bg-card';
 
 	let tab = $state<TabId>('general');
+	let serverStatus = $state<api.NavidromeServerInfo | null>(null);
+	let scanning = $state(false);
+
+	async function loadServerStatus() {
+		try {
+			serverStatus = await api.navidromeStatus();
+		} catch {
+			serverStatus = null;
+		}
+	}
+
+	async function triggerScan() {
+		if (scanning) return;
+		scanning = true;
+		try {
+			await api.navidromeScanLibrary();
+			toast.success('Navidrome library scan initiated');
+		} catch (e) {
+			toast.error(`Scan failed: ${e}`);
+		} finally {
+			scanning = false;
+		}
+	}
+
+	async function disconnectServer() {
+		try {
+			await api.navidromeDisconnect();
+			await api.signOut();
+			serverStatus = null;
+			toast.success('Disconnected from Navidrome server');
+			refreshView();
+			loadLibrary(true);
+		} catch (e) {
+			toast.error(`Disconnect failed: ${e}`);
+		}
+	}
 	const currentTab = $derived(TABS.find((tb) => tb.id === tab) ?? TABS[0]);
 	const shortcutsHint = $derived(t('settings.general.shortcuts_hint').split('{key}'));
 	const currentLocaleLabel = $derived(
@@ -135,6 +174,7 @@
 			} else {
 				load();
 			}
+			loadServerStatus();
 			updateResult = null;
 		});
 	});
@@ -540,6 +580,103 @@
 				<div class="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-5">
 					{#if !loaded}
 						<p class="text-sm text-muted-foreground">{t('common.loading')}</p>
+					{:else if tab === 'navidrome'}
+						<div class={GROUP}>
+							<div class={LABEL}>Server Connection</div>
+							<div class={CARD}>
+								<div class="flex items-center justify-between p-4">
+									<div class="space-y-1">
+										<div class="text-sm font-medium">
+											{auth.account?.signedIn ? 'Connected' : 'Disconnected'}
+										</div>
+										<div class="text-xs text-muted-foreground">
+											{#if auth.account?.signedIn}
+												Server: <span class="font-mono text-foreground">{auth.account.serverUrl ?? auth.account.channelId ?? 'Navidrome'}</span>
+												{#if auth.account.name}
+													• User: <span class="font-medium text-foreground">{auth.account.name}</span>
+												{/if}
+											{:else}
+												Connect to your Navidrome server to browse and stream your music library.
+											{/if}
+										</div>
+									</div>
+									<div class="flex items-center gap-2">
+										{#if auth.account?.signedIn}
+											<Button
+												size="sm"
+												variant="outline"
+												onclick={() => {
+													ui.settingsOpen = false;
+													openServerLogin();
+												}}
+											>
+												Change Server
+											</Button>
+											<Button
+												size="sm"
+												variant="destructive"
+												onclick={disconnectServer}
+											>
+												Disconnect
+											</Button>
+										{:else}
+											<Button
+												size="sm"
+												onclick={() => {
+													ui.settingsOpen = false;
+													openServerLogin();
+												}}
+											>
+												Connect
+											</Button>
+										{/if}
+									</div>
+								</div>
+
+								{#if serverStatus}
+									<div class="flex items-center justify-between px-4 py-3 bg-muted/30 text-xs">
+										<span class="text-muted-foreground">Subsonic API Version</span>
+										<span class="font-mono font-medium">{serverStatus.version || serverStatus.subsonic_version || '1.16'}</span>
+									</div>
+									{#if serverStatus.server_version}
+										<div class="flex items-center justify-between px-4 py-3 bg-muted/30 text-xs">
+											<span class="text-muted-foreground">Server Version</span>
+											<span class="font-mono font-medium">{serverStatus.server_version}</span>
+										</div>
+									{/if}
+									<div class="flex items-center justify-between px-4 py-3 bg-muted/30 text-xs">
+										<span class="text-muted-foreground">OpenSubsonic Extension</span>
+										<span class="font-medium {serverStatus.open_subsonic ? 'text-green-500' : 'text-muted-foreground'}">
+											{serverStatus.open_subsonic ? 'Supported' : 'Standard Subsonic'}
+										</span>
+									</div>
+								{/if}
+							</div>
+						</div>
+
+						{#if auth.account?.signedIn}
+							<div class={GROUP}>
+								<div class={LABEL}>Library Synchronization</div>
+								<div class={CARD}>
+									<div class="flex items-center justify-between p-4">
+										<div class="space-y-0.5">
+											<div class="text-sm font-medium">Rescan Library</div>
+											<div class="text-xs text-muted-foreground">
+												Ask the Navidrome server to scan your music directories for newly added tracks and albums.
+											</div>
+										</div>
+										<Button
+											size="sm"
+											variant="outline"
+											disabled={scanning}
+											onclick={triggerScan}
+										>
+											{scanning ? 'Scanning...' : 'Start Scan'}
+										</Button>
+									</div>
+								</div>
+							</div>
+						{/if}
 					{:else if tab === 'general'}
 						<!-- The shortcuts list has no other entry point in the chrome. Closing settings
 						     first: two stacked dialogs would trap focus in the wrong one. -->

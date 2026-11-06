@@ -29,21 +29,15 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
-# Phase 2 extraction stack (cipher + PoToken). context/04, 05, 13.
-# BotGuard runs under deno_core + JSDOM, NOT in a hidden webview. Every token a real browser engine
-# mints is rejected by googlevideo; a minimal-DOM runtime is the only one that produces an accepted
-# one. Measured in `progress/active/webremix-stream-403.md`. This pulls in V8.
-rustypipe-botguard = "0.1.2"
 base64 = "0.22"
 regex = "1"
 urlencoding = "2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "stream"] }
-# Loopback HTTP server for the music-video proxy (videoproxy.rs). Already in the tree behind
-# reqwest, so this pins nothing new; WebKitGTK's media backend will only load http/https/blob.
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 
+subsonic = { path = "../crates/subsonic" }
 innertube = { path = "../crates/innertube" }
 player = { path = "../crates/player" }
 souvlaki = { version = "0.8.3", default-features = false, features = ["use_zbus"] }

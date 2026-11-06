@@ -3,7 +3,6 @@
 mod appicon;
 mod audioproxy;
 mod blocked;
-mod cipher;
 mod commands;
 mod db;
 mod diagnostics;
@@ -21,14 +20,8 @@ mod lyrics;
 mod matugen;
 mod media;
 mod mini;
-#[cfg(target_os = "linux")]
-mod nativevideo;
-#[cfg(windows)]
-#[path = "nativevideo_windows.rs"]
-mod nativevideo;
 mod notify;
 mod orchestrator;
-mod potoken;
 mod romanize;
 mod session;
 mod spotify;
@@ -37,8 +30,6 @@ mod stats;
 #[cfg(target_os = "windows")]
 mod taskbar;
 mod tray;
-mod videoproxy;
-mod webview;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -48,10 +39,8 @@ use innertube::{Clients, InnerTube, Locale, Session};
 use player::{Player, PlayerEvent};
 use tauri::{Emitter, Manager};
 
-use cipher::{CipherDeobfuscator, PlayerConfigStore};
 use db::Db;
 use orchestrator::Orchestrator;
-use potoken::PoTokenGenerator;
 use state::AppState;
 
 /// Hand glibc's freed-but-retained heap back to the OS every few minutes.
@@ -681,14 +670,6 @@ pub fn run() {
     }
 
     builder
-        // The hidden cipher webview's document (webview.rs). A registered scheme, because a
-        // `data:` URL is not a document WebView2 will navigate to.
-        .register_uri_scheme_protocol(webview::SCHEME, |_ctx, _req| {
-            tauri::http::Response::builder()
-                .header(tauri::http::header::CONTENT_TYPE, "text/html")
-                .body(webview::HARNESS_HTML.as_bytes())
-                .expect("static harness response")
-        })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         // Folder picker for the local-music library (local.rs).
@@ -799,12 +780,12 @@ pub fn run() {
             // First run (no stored visitorData): bootstrap it in the background after the window is
             // up, rather than blocking setup on a network GET (up to 60s on a bad connection). See
             // the spawned task after AppState is created.
-            let needs_visitor_bootstrap = visitor_data.is_none();
+            let _needs_visitor_bootstrap = visitor_data.is_none();
             if cookie.is_some() {
                 tracing::info!("loaded persisted login session");
             }
 
-            let visitor_for_prewarm = visitor_data.clone();
+            let _visitor_for_prewarm = visitor_data.clone();
             let session = Session { locale: Locale::default(), visitor_data, data_sync_id, cookie };
             let it = match InnerTube::new(session, proxy.as_deref()) {
                 Ok(it) => it,
@@ -856,16 +837,11 @@ pub fn run() {
                 ),
             };
 
-            // Phase 2 extraction stack: cipher + PoToken hidden webviews behind the orchestrator.
-            let config = Arc::new(PlayerConfigStore::new(&data_dir));
-            let cipher = Arc::new(CipherDeobfuscator::new(handle.clone(), &data_dir, config));
-            let potoken = Arc::new(PoTokenGenerator::new(db.clone()));
-            let orchestrator = Arc::new(Orchestrator::new(
-                it.clone(),
-                clients.clone(),
-                cipher.clone(),
-                potoken.clone(),
-            ));
+            let subsonic_client = db.navidrome_credentials().and_then(|(url, user, token, salt)| {
+                subsonic::SubsonicClient::from_token(&url, &user, &token, &salt).ok()
+            });
+            let subsonic = Arc::new(tokio::sync::RwLock::new(subsonic_client));
+            let orchestrator = Arc::new(Orchestrator::new(subsonic.clone()));
 
             // OS media controls (MPRIS/SMTC/NowPlaying). Its callback resolves AppState lazily, so
             // it's fine to spawn before AppState is managed. context/16, D11.
@@ -902,6 +878,7 @@ pub fn run() {
             let (lt, lt_sync_rx) = listentogether::LtSession::new(handle.clone(), lt_url);
 
             let app_state = Arc::new(AppState::new(
+                subsonic,
                 it,
                 clients,
                 player,
@@ -916,14 +893,7 @@ pub fn run() {
             ));
             app.manage(app_state.clone());
 
-            // The player view's <video> pulls its bytes from Rust over loopback, so the webview
-            // never sees a googlevideo URL (context/11). videoproxy.rs explains why a socket and
-            // not a custom scheme.
-            videoproxy::start(app_state.clone());
-
-            // mpv's audio goes through a second loopback socket so the open-ended range ffmpeg
-            // sends becomes bounded ranges upstream, which is the difference between 32 KB/s and
-            // several MB/s on the same URL. audioproxy.rs has the measurements.
+            // mpv's audio goes through a loopback socket so bounded ranges upstream are served.
             audioproxy::start();
 
             // Local music artwork reaches the webview over the asset protocol, whose configured
@@ -989,27 +959,6 @@ pub fn run() {
                 });
             }
 
-            // First-run visitorData bootstrap, off the startup path. `set_visitor_data` writes
-            // through the shared session (Arc<RwLock>), so the orchestrator's InnerTube clone sees
-            // it; resolves degrade gracefully (no PoToken) until it lands. context/04 §A.
-            if needs_visitor_bootstrap {
-                let st = app_state.clone();
-                let potoken = potoken.clone();
-                tauri::async_runtime::spawn(async move {
-                    match st.it.fetch_visitor_data().await {
-                        Ok(vd) => {
-                            st.it.set_visitor_data(Some(vd.clone()));
-                            st.db.set_setting("visitor_data", &vd);
-                            tracing::info!("visitorData bootstrapped (background)");
-                            potoken.prewarm(&vd).await;
-                        }
-                        Err(e) => {
-                            tracing::warn!(error = %e, "visitorData bootstrap failed (continuing)")
-                        }
-                    }
-                });
-            }
-
             // Keep the login alive by itself (#165 / KI-2). Two signals from the transport:
             // `cookie_changed` when a response rotated `__Secure-*SIDTS` (persist it, or the next
             // launch starts from a dead snapshot again), and `session_rejected` when YouTube
@@ -1061,53 +1010,7 @@ pub fn run() {
             }
 
             // Pump mpv events → UI events + queue advance. context/11 events, context/14 §TrackEnded.
-            #[cfg(any(target_os = "linux", windows))]
-            let video_state = app_state.clone();
             spawn_event_pump(app_state, handle, events);
-
-            // Prewarm the webviews off the first-play path (context/04 §startup). The delays let
-            // the event loop come up first (run_on_main_thread needs it pumping).
-            {
-                let cipher = cipher.clone();
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(Duration::from_millis(1500)).await;
-                    cipher.prewarm().await;
-                });
-            }
-            if let Some(vd) = visitor_for_prewarm {
-                let potoken = potoken.clone();
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(Duration::from_millis(2500)).await;
-                    potoken.prewarm(&vd).await;
-                });
-            }
-            // Mint-and-destroy policy (Phase-0 decision), now applied to the BotGuard V8 isolate
-            // rather than a webview. Measured: the live isolate costs ~92 MB RSS, of which a
-            // teardown returns ~39 MB (the rest is V8 platform + arenas, retained for the life of
-            // the process once BotGuard has run at all).
-            //
-            // The idle window has to outlast a track, not a track gap. The gapless lookahead mints
-            // for the next track seconds after the current one starts, so the runtime then sits
-            // idle for the whole song: at 60s it was torn down and rebuilt once per track, and a
-            // cold bootstrap (~0.8-2.3s) landed on the critical path whenever a track started from
-            // a stop. 10 minutes covers any normal song, so continuous playback keeps one isolate,
-            // and the memory still comes back ten minutes after the user stops listening.
-            //
-            // The cipher webview rides the same tick, for the same reason: it is a whole
-            // `WebKitWebProcess` (91 MiB PSS / 234 MiB RSS measured on Fedora) held for two
-            // functions that run once per track resolve. Not on Windows, where rebuilding it
-            // freezes the app: see `CipherDeobfuscator::teardown_if_idle` (issue #288).
-            {
-                let potoken = potoken.clone();
-                let cipher = cipher.clone();
-                tauri::async_runtime::spawn(async move {
-                    loop {
-                        tokio::time::sleep(Duration::from_secs(30)).await;
-                        potoken.teardown_if_idle(Duration::from_secs(600)).await;
-                        cipher.teardown_if_idle(Duration::from_secs(600)).await;
-                    }
-                });
-            }
 
             // Hand the frame to the compositor when the user asked for it (issue #65). The window
             // is created undecorated, so this is the one place that reverses it; macOS never gets
@@ -1141,16 +1044,7 @@ pub fn run() {
                 if db.get_setting("ambient_light").as_deref() == Some("true") {
                     set_webgl(app.handle(), true);
                 }
-                if let Some(w) = app.get_webview_window("main") {
-                    nativevideo::install(&w, video_state);
-                }
                 spawn_heap_trimmer();
-            }
-            #[cfg(windows)]
-            {
-                if let Some(w) = app.get_webview_window("main") {
-                    nativevideo::install(&w, video_state);
-                }
             }
             Ok(())
         })
@@ -1313,6 +1207,10 @@ pub fn run() {
             commands::diagnostics_summary,
             commands::save_diagnostics,
             commands::log_ui,
+            commands::navidrome_connect,
+            commands::navidrome_status,
+            commands::navidrome_disconnect,
+            commands::navidrome_scan_library,
         ]))
         .on_window_event(|window, event| {
             // Close-to-tray: ✕ hides the main window and playback keeps running; real quit is

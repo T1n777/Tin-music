@@ -12,6 +12,8 @@ export function thumb(url: string | undefined | null, px: number): string | unde
 	// boundary so what gets stored (queue, Shortcuts) stays the real path — which is also what
 	// MPRIS needs.
 	if (url.startsWith('/') || /^[A-Za-z]:[\\/]/.test(url)) return convertFileSrc(url);
+	// Subsonic / Navidrome cover art dynamic resizing via size query parameter
+	if (/([?&]size=)\d+/.test(url)) return url.replace(/([?&]size=)\d+/, `$1${px}`);
 	// Every InnerTube reply, /player included, tops a video's thumbs out at 426x240, which the big
 	// player crops square and stretches (#425). Ask for the 1280x720 file instead; not every video
 	// has one, so the caller steps down to the original on a miss (`isMissingThumb`).

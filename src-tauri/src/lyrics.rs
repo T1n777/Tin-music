@@ -50,12 +50,13 @@ const LRCLIB_ROOT: &str = "https://lrclib.net/api";
 
 /// Every provider, in the order a fresh install asks them. The user's order lives in the
 /// `lyrics_providers` setting; this is the default and the list of what exists.
-pub const PROVIDERS: [&str; 8] =
-    ["boidu", "unison", "lyricsplus", "lrclib", "youtube", "netease", "qq", "kugou"];
+pub const PROVIDERS: [&str; 9] =
+    ["navidrome", "lrclib", "boidu", "unison", "lyricsplus", "youtube", "netease", "qq", "kugou"];
 
 /// The attribution a provider's lyrics carry (`Lyrics::source`), also its name in Settings.
 pub fn provider_name(id: &str) -> &'static str {
     match id {
+        "navidrome" => "Navidrome",
         "boidu" => "Boidu",
         "unison" => "Unison",
         "lyricsplus" => "LyricsPlus",
@@ -276,6 +277,19 @@ async fn resolve(state: &AppState, req: &mut LyricsRequest) -> Result<Option<Nex
     if crate::local::is_local_song(&req.video_id) {
         return Ok(None);
     }
+    if let Some(client) = state.subsonic.read().await.as_ref() {
+        if req.duration.is_none() || req.album.is_none() {
+            if let Ok(song) = client.get_song(&req.video_id).await {
+                if req.duration.is_none() {
+                    req.duration = song.duration.as_deref().and_then(duration_str_secs);
+                }
+                if req.album.is_none() {
+                    req.album = song.album;
+                }
+            }
+        }
+        return Ok(None);
+    }
     let client = state.clients.get(innertube::METADATA_CLIENT).ok_or("no metadata client")?;
     let next = state.it.next(client, Some(&req.video_id), None).await.map_err(|e| e.to_string())?;
     let seed = next.items.iter().find(|i| i.video_id == req.video_id);
@@ -288,6 +302,32 @@ async fn resolve(state: &AppState, req: &mut LyricsRequest) -> Result<Option<Nex
     Ok(Some(next))
 }
 
+async fn navidrome_get(state: &AppState, video_id: &str) -> Result<Option<Lyrics>, String> {
+    let client_guard = state.subsonic.read().await;
+    let Some(client) = client_guard.as_ref() else {
+        return Ok(None);
+    };
+    let timed = client.get_lyrics(video_id).await.map_err(|e| e.to_string())?;
+    let Some(timed) = timed else {
+        return Ok(None);
+    };
+    if timed.is_empty() {
+        return Ok(None);
+    }
+    let lines = timed
+        .into_iter()
+        .map(|l| LyricLine::simple(Some(l.start_ms as u64), l.text))
+        .collect();
+    Ok(Some(Lyrics {
+        synced: true,
+        source: "Navidrome".to_string(),
+        lines,
+        provider: "navidrome".to_string(),
+        offset_ms: 0,
+        ..Default::default()
+    }))
+}
+
 /// Ask one provider. Its lyrics come back tagged with its id. `Err` is transport trouble (or an
 /// answer we couldn't read), never "no lyrics", so it can't cache a miss.
 async fn ask(
@@ -298,6 +338,7 @@ async fn ask(
 ) -> Result<Option<Lyrics>, String> {
     let e = |e: reqwest::Error| e.to_string();
     let hit = match id {
+        "navidrome" => navidrome_get(state, &req.video_id).await,
         "boidu" => boidu_get(req).await.map_err(e),
         "unison" => unison_get(req).await.map_err(e),
         "lyricsplus" => lyricsplus_get(req).await.map_err(e),
@@ -1726,12 +1767,12 @@ mod tests {
         // Unknown and repeated ids are dropped; the ones it doesn't name follow, switched on.
         assert_eq!(
             ids(provider_order(Some("lrclib, -boidu,gone,lrclib"))),
-            "lrclib,-boidu,unison,lyricsplus,youtube,netease,qq,kugou"
+            "lrclib,-boidu,navidrome,unison,lyricsplus,youtube,netease,qq,kugou"
         );
         // Every source off stays every source off when a release adds one.
         assert_eq!(
             ids(provider_order(Some("-boidu,-lyricsplus,-lrclib,-youtube,-netease,-qq,-kugou"))),
-            "-boidu,-lyricsplus,-lrclib,-youtube,-netease,-qq,-kugou,-unison"
+            "-boidu,-lyricsplus,-lrclib,-youtube,-netease,-qq,-kugou,-navidrome,-unison"
         );
     }
 

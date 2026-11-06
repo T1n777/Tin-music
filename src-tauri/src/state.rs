@@ -53,6 +53,7 @@ struct Listen {
 }
 
 pub struct AppState {
+    pub subsonic: Arc<tokio::sync::RwLock<Option<subsonic::SubsonicClient>>>,
     pub it: InnerTube,
     pub clients: Clients,
     pub player: Player,
@@ -483,6 +484,7 @@ fn get_url(map: &VideoUrls, id: &str, now: i64) -> Option<String> {
 impl AppState {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        subsonic: Arc<tokio::sync::RwLock<Option<subsonic::SubsonicClient>>>,
         it: InnerTube,
         clients: Clients,
         player: Player,
@@ -496,6 +498,7 @@ impl AppState {
         lastfm: crate::lastfm::LastfmHandle,
     ) -> Self {
         AppState {
+            subsonic,
             it,
             clients,
             player,
@@ -525,6 +528,13 @@ impl AppState {
             last_queue_fingerprint: AtomicU64::new(0),
             last_persisted_fingerprint: AtomicU64::new(0),
         }
+    }
+
+    pub async fn subsonic_client(&self) -> Result<subsonic::SubsonicClient, String> {
+        let guard = self.subsonic.read().await;
+        guard
+            .clone()
+            .ok_or_else(|| "Navidrome server not connected. Connect via Settings.".to_string())
     }
 
     /// Remember where the loopback video proxy should fetch `id` from.
@@ -976,6 +986,11 @@ impl AppState {
     /// as its own action behind a confirm.
     pub async fn sign_out(&self) {
         let _turn = self.auth.lock().await;
+        self.db.clear_navidrome_credentials();
+        {
+            let mut guard = self.subsonic.write().await;
+            *guard = None;
+        }
         self.clear_session();
     }
 
@@ -1183,6 +1198,16 @@ impl AppState {
     /// Current account for the UI. New installs derive it from the canonical selected identity;
     /// legacy `account_json` remains a read fallback so existing databases migrate without a wipe.
     pub fn account_snapshot(&self) -> serde_json::Value {
+        if let Some((url, user, _, _)) = self.db.navidrome_credentials() {
+            return serde_json::json!({
+                "signedIn": true,
+                "name": user,
+                "serverUrl": url,
+                "channelId": url,
+                "selectionRequired": false,
+                "canSwitch": false,
+            });
+        }
         if auth_selection_pending(&self.db) && self.it.is_logged_in() {
             return serde_json::json!({
                 "signedIn": true,
@@ -1554,34 +1579,66 @@ impl AppState {
         {
             return Err("This has no radio behind it.".into());
         }
-        let client = self.clients.get(innertube::METADATA_CLIENT).ok_or("no metadata client")?;
-        // Resolve the seed to (videoId?, radio playlist id). Album and artist need a page fetch:
-        // an album's radio keys off its audio playlist, not its `MPRE…` browseId, and an artist
-        // radio id is server-supplied.
-        let (video_id, playlist_id) = match kind {
-            "song" => (Some(id.to_owned()), format!("RDAMVM{id}")),
-            "playlist" => (None, radio_seed_for(Some(id.to_owned())).unwrap()),
-            "album" => {
-                let page = self.it.album(client, id).await.map_err(|e| e.to_string())?;
-                let pl = page.playlist_id.ok_or("This album has no radio.")?;
-                (None, radio_seed_for(Some(pl)).unwrap())
-            }
-            "artist" => {
-                let page = self.it.artist(client, id).await.map_err(|e| e.to_string())?;
-                match page.radio_playlist_id {
-                    Some(pl) => (None, pl),
-                    // No radio button on the header: fall back to a radio on this artist's most
-                    // played track, which is roughly what that button seeds anyway.
-                    None => {
-                        let top = page.top_songs.first().ok_or("This artist has no radio.")?;
-                        (Some(top.video_id.clone()), format!("RDAMVM{}", top.video_id))
+        let (video_id, mut items, seed) = if let Ok(subsonic) = self.subsonic_client().await {
+            let (vid, list) = match kind {
+                "song" => {
+                    let mut similar = subsonic.get_similar_songs(id, 50).await.unwrap_or_default();
+                    if similar.is_empty() {
+                        similar = subsonic.get_random_songs(50).await.unwrap_or_default();
+                    }
+                    if let Ok(seed_song) = subsonic.get_song(id).await {
+                        similar.retain(|s| s.video_id != id);
+                        similar.insert(0, seed_song);
+                    }
+                    (Some(id.to_string()), similar)
+                }
+                "artist" => {
+                    let page = subsonic.get_artist(id).await.map_err(|e| e.to_string())?;
+                    let mut tracks = page.top_songs;
+                    if tracks.is_empty() {
+                        tracks = subsonic.get_random_songs(50).await.unwrap_or_default();
+                    }
+                    (None, tracks)
+                }
+                "album" => {
+                    let page = subsonic.get_album(id).await.map_err(|e| e.to_string())?;
+                    let mut tracks = page.items;
+                    if let Some(first) = tracks.first() {
+                        let similar = subsonic.get_similar_songs(&first.video_id, 30).await.unwrap_or_default();
+                        tracks.extend(similar);
+                    }
+                    (None, tracks)
+                }
+                _ => (None, subsonic.get_random_songs(50).await.unwrap_or_default()),
+            };
+            let seed_str = format!("radio_{id}");
+            (vid, list, seed_str)
+        } else {
+            let client = self.clients.get(innertube::METADATA_CLIENT).ok_or("no metadata client")?;
+            let (video_id, playlist_id) = match kind {
+                "song" => (Some(id.to_owned()), format!("RDAMVM{id}")),
+                "playlist" => (None, radio_seed_for(Some(id.to_owned())).unwrap()),
+                "album" => {
+                    let page = self.it.album(client, id).await.map_err(|e| e.to_string())?;
+                    let pl = page.playlist_id.ok_or("This album has no radio.")?;
+                    (None, radio_seed_for(Some(pl)).unwrap())
+                }
+                "artist" => {
+                    let page = self.it.artist(client, id).await.map_err(|e| e.to_string())?;
+                    match page.radio_playlist_id {
+                        Some(pl) => (None, pl),
+                        None => {
+                            let top = page.top_songs.first().ok_or("This artist has no radio.")?;
+                            (Some(top.video_id.clone()), format!("RDAMVM{}", top.video_id))
+                        }
                     }
                 }
-            }
-            other => return Err(format!("unknown radio kind: {other}")),
+                other => return Err(format!("unknown radio kind: {other}")),
+            };
+            let (items, seed) = self.fetch_radio(video_id.as_deref(), &playlist_id).await?;
+            (video_id, items, seed)
         };
 
-        let (mut items, seed) = self.fetch_radio(video_id.as_deref(), &playlist_id).await?;
         // The seed song comes back inside the first page (usually first, but the panel decides):
         // start there so a radio on song X actually opens on X. Only what follows it is reordered,
         // and a radio with no seed song (artist, album, playlist) is reordered whole.
@@ -2984,6 +3041,14 @@ impl AppState {
                 l.row = self.db.record_listen(&item.video_id, &json, now_secs(), l.heard as i64);
                 l.saved = l.heard;
             }
+            let vid = item.video_id.clone();
+            let subsonic = self.subsonic.clone();
+            tauri::async_runtime::spawn(async move {
+                let client = subsonic.read().await;
+                if let Some(c) = client.as_ref() {
+                    let _ = c.scrobble(&vid, true).await;
+                }
+            });
         }
 
         if !self.history_enabled() || !self.it.is_logged_in() {
@@ -3104,16 +3169,22 @@ impl AppState {
             let seed = q.radio_seed.clone().unwrap_or_else(|| format!("RDAMVM{}", last.video_id));
             (last.video_id.clone(), seed)
         };
-        let Some(client) = self.clients.get(innertube::METADATA_CLIENT) else { return 0 };
-        // Snapshot → network → re-lock, same discipline as `prime_lookahead`; the generation check
-        // between them is what makes it safe, and `absorb_radio` dedupes against the queue as it
-        // is after the fetch, so whatever grew it meanwhile can't come back as a duplicate.
-        let fresh = match self.it.next(client, Some(&last_video), Some(&seed)).await {
-            Ok(next) => next.items,
-            Err(e) => {
-                tracing::warn!(error = %e, "autoplay radio fetch failed");
-                return 0;
+        let fresh = if let Ok(subsonic) = self.subsonic_client().await {
+            let mut sim = subsonic.get_similar_songs(&last_video, AUTOPLAY_BATCH as u32).await.unwrap_or_default();
+            if sim.is_empty() {
+                sim = subsonic.get_random_songs(AUTOPLAY_BATCH as u32).await.unwrap_or_default();
             }
+            sim
+        } else if let Some(client) = self.clients.get(innertube::METADATA_CLIENT) {
+            match self.it.next(client, Some(&last_video), Some(&seed)).await {
+                Ok(next) => next.items,
+                Err(e) => {
+                    tracing::warn!(error = %e, "autoplay radio fetch failed");
+                    return 0;
+                }
+            }
+        } else {
+            return 0;
         };
         let added = self.absorb_radio(fresh, gen, &seed, AUTOPLAY_BATCH).await;
         if added > 0 {
@@ -4905,9 +4976,6 @@ fn loudness_gain(loudness_db: Option<f64>) -> Option<f64> {
 
 /// This window draws music videos with mpv (nativevideo.rs) rather than a `<video>` element.
 pub fn native_video() -> bool {
-    #[cfg(any(target_os = "linux", windows))]
-    return crate::nativevideo::available();
-    #[cfg(not(any(target_os = "linux", windows)))]
     false
 }
 

@@ -11,12 +11,13 @@
 		ArrowDown01Icon,
 		Add01Icon,
 		Cancel01Icon,
-		UserMinus01Icon
+		UserMinus01Icon,
+		ServerIcon
 	} from '@hugeicons/core-free-icons';
 	import { Button } from '$lib/components/ui/button';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as api from '$lib/api';
-	import { auth, openChannelPicker, toast } from '$lib/player.svelte';
+	import { auth, openChannelPicker, openServerLogin, toast } from '$lib/player.svelte';
 	import { thumb } from '$lib/thumb';
 	import { anchorMenu, fitMenu, NO_ANCHOR } from '$lib/menu';
 	import { t } from '$lib/i18n.svelte';
@@ -49,6 +50,21 @@
 		} catch (e) {
 			toast.error(String(e));
 			accounts = [];
+		}
+	}
+
+	function openConnect() {
+		menuOpen = false;
+		openServerLogin();
+	}
+
+	async function scanLibrary() {
+		menuOpen = false;
+		try {
+			await api.navidromeScanLibrary();
+			toast.success('Navidrome library scan started');
+		} catch (e) {
+			toast.error(`Scan failed: ${e}`);
 		}
 	}
 
@@ -220,44 +236,27 @@
 		{/if}
 
 		{#if auth.account?.signedIn}
-			<!-- justify-start on all three: centred content puts each icon at a different x, because
-			     the labels are different widths. Left-aligned, the icons share a column and so do
-			     the labels, lining up with the saved-account rows above. -->
-			<Button variant="outline" size="sm" class="mb-2 w-full justify-start gap-2" onclick={addAccount}>
-				<HugeiconsIcon icon={Add01Icon} class="size-5 shrink-0" />
-				{t('nav.add_account')}
+			<Button variant="outline" size="sm" class="mb-2 w-full justify-start gap-2" onclick={scanLibrary}>
+				<HugeiconsIcon icon={ServerIcon} class="size-4 shrink-0" />
+				Rescan Library
 			</Button>
-			<!-- Always offered, never gated on a stored "you have one channel": that answer comes from
-			     a single accounts_list call at sign-in, and when it fails the switcher used to vanish
-			     for good. The picker fetches the list live and shows its own error. -->
-			<Button variant="outline" size="sm" class="mb-2 w-full justify-start gap-2" onclick={switchChannel}>
-				<HugeiconsIcon icon={UserCircleIcon} class="size-5 shrink-0" />
-				{t('nav.switch_channel')}
+			<Button variant="outline" size="sm" class="mb-2 w-full justify-start gap-2" onclick={openConnect}>
+				<HugeiconsIcon icon={ServerIcon} class="size-4 shrink-0" />
+				Switch Server
 			</Button>
 			<Button variant="outline" size="sm" class="w-full justify-start gap-2" onclick={doSignOut}>
-				<HugeiconsIcon icon={Logout01Icon} class="size-5 shrink-0" />
-				{t('nav.sign_out')}
+				<HugeiconsIcon icon={Logout01Icon} class="size-4 shrink-0" />
+				Disconnect
 			</Button>
 		{:else}
-			{#if others.length === 0}
-				<p class="text-sm font-medium">{t('nav.sign_in')}</p>
-				<p class="mt-1 text-xs text-muted-foreground">
-					{t('nav.sign_in_hint')}
-				</p>
-			{:else}
-				<p class="text-xs text-muted-foreground">{t('nav.saved_accounts_hint')}</p>
-			{/if}
-			<!-- Signed out with saved accounts: the plain sign-in reuses the login webview's own
-			     Google session, which is the fast path back into whichever account it last held.
-			     Add account is the one that clears it first, so it is the way to reach a different
-			     one. Both are offered rather than guessing which the user meant. -->
-			<Button class="mt-3 w-full" onclick={signInGoogle}>{t('common.sign_in_google')}</Button>
-			{#if others.length > 0}
-				<Button variant="outline" size="sm" class="mt-2 w-full justify-start gap-2" onclick={addAccount}>
-					<HugeiconsIcon icon={Add01Icon} class="size-5 shrink-0" />
-					{t('nav.add_account')}
-				</Button>
-			{/if}
+			<p class="text-sm font-medium">Navidrome Server</p>
+			<p class="mt-1 text-xs text-muted-foreground">
+				Connect to your Navidrome music server to stream your tracks and playlists.
+			</p>
+			<Button class="mt-3 w-full gap-2" onclick={openConnect}>
+				<HugeiconsIcon icon={ServerIcon} class="size-4" />
+				Connect to Server
+			</Button>
 		{/if}
 	</div>
 {/if}

@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use innertube::{AlbumPage, BrowseItem, SongItem};
+use subsonic::{AlbumPage, BrowseItem, SongItem};
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::tag::{Accessor, ItemKey};
 
@@ -465,7 +465,7 @@ fn albums_of(tracks: &[LocalTrack]) -> Vec<BrowseItem> {
             // The card's face is the first track that actually has artwork.
             let face = ts.iter().find(|t| t.cover.is_some()).unwrap_or(&ts[0]);
             BrowseItem {
-                kind: "album",
+                kind: "album".to_string(),
                 id: album_id_of(face),
                 title: face.album.clone(),
                 subtitle: Some(format!(
@@ -521,7 +521,7 @@ fn artists_of(tracks: &[LocalTrack]) -> Vec<BrowseItem> {
         .map(|(name, ts)| {
             let n = ts.len();
             BrowseItem {
-                kind: "artist",
+                kind: "artist".to_string(),
                 id: format!("{ARTIST_PREFIX}{name}"),
                 title: (*name).to_string(),
                 subtitle: Some(format!("{} song{}", n, if n == 1 { "" } else { "s" })),

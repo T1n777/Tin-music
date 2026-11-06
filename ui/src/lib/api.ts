@@ -114,6 +114,7 @@ export interface Account {
 	email?: string | null;
 	thumbnail?: string | null;
 	channelId?: string | null;
+	serverUrl?: string | null;
 	canSwitch?: boolean;
 	/** The cookie authenticated, but a multi-channel login is not complete until one is chosen. */
 	selectionRequired?: boolean;
@@ -1355,3 +1356,22 @@ export const onMatugenThemeChanged = (cb: (css: string | null) => void): Promise
 	listen<string | null>('matugen-theme-changed', (event) => cb(event.payload));
 export const startMatugenWatcher = () => invoke<void>('start_matugen_watcher');
 export const stopMatugenWatcher = () => invoke<void>('stop_matugen_watcher');
+
+export interface NavidromeServerInfo {
+	version: string;
+	subsonic_version?: string;
+	server_version?: string;
+	open_subsonic: boolean;
+}
+
+export const navidromeConnect = (url: string, username: string, password?: string) =>
+	invoke<NavidromeServerInfo>('navidrome_connect', { url, username, password });
+
+export const navidromeStatus = () =>
+	invoke<NavidromeServerInfo | null>('navidrome_status');
+
+export const navidromeDisconnect = () =>
+	invoke<void>('navidrome_disconnect');
+
+export const navidromeScanLibrary = () =>
+	invoke<void>('navidrome_scan_library');

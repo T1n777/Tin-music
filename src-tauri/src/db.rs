@@ -455,6 +455,28 @@ impl Db {
         let _ = conn.execute("DELETE FROM settings WHERE key = ?1", [key]);
     }
 
+    pub fn navidrome_credentials(&self) -> Option<(String, String, String, String)> {
+        let url = self.get_setting("navidrome_server_url")?;
+        let user = self.get_setting("navidrome_username")?;
+        let token = self.get_setting("navidrome_token")?;
+        let salt = self.get_setting("navidrome_salt")?;
+        Some((url, user, token, salt))
+    }
+
+    pub fn save_navidrome_credentials(&self, url: &str, user: &str, token: &str, salt: &str) {
+        self.set_setting("navidrome_server_url", url);
+        self.set_setting("navidrome_username", user);
+        self.set_setting("navidrome_token", token);
+        self.set_setting("navidrome_salt", salt);
+    }
+
+    pub fn clear_navidrome_credentials(&self) {
+        self.delete_setting("navidrome_server_url");
+        self.delete_setting("navidrome_username");
+        self.delete_setting("navidrome_token");
+        self.delete_setting("navidrome_salt");
+    }
+
     /// Persist the canonical selected identity and its two legacy projections atomically. Older
     /// releases still read `data_sync_id` / `account_json`; keeping all three in one transaction
     /// prevents a restart from pairing one channel's request delegation with another's display.

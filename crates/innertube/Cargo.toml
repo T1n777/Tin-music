@@ -17,6 +17,7 @@ urlencoding = "2"
 base64 = "0.22"
 futures-util = { workspace = true }
 rustypipe = { version = "0.11", default-features = false, features = ["rustls-tls-webpki-roots"] }
+subsonic = { path = "../subsonic" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }

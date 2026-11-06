@@ -60,7 +60,7 @@ async function look(): Promise<boolean> {
 			// instead of being offered a downgrade to the last release. A dev build after the version
 			// bump is the other build ahead of Latest; it gets the rollback banner, which only costs a
 			// banner in dev.
-			u = await check({ allowDowngrades: !isPrerelease(current) });
+			u = await check({ allowDowngrades: !isPrerelease(current) } as any);
 		}
 	} catch (e) {
 		// The plugin resolves this platform's entry in latest.json BEFORE it compares versions, so a
