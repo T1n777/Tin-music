@@ -123,3 +123,31 @@ fn test_stream_and_cover_url_generation() {
     assert!(cover_url.contains("id=cover456"));
     assert!(cover_url.contains("size=500"));
 }
+
+#[test]
+fn test_search_result3_deserialization() {
+    let json_data = r#"{
+        "subsonic-response": {
+            "status": "ok",
+            "version": "1.16.1",
+            "type": "navidrome",
+            "searchResult3": {
+                "song": [
+                    {
+                        "id": "song_1",
+                        "title": "Tokyo Drift",
+                        "artist": "Blasterjaxx",
+                        "album": "Tokyo Drift",
+                        "duration": 146
+                    }
+                ]
+            }
+        }
+    }"#;
+
+    let envelope: SubsonicEnvelope<SearchResult3Container> = serde_json::from_str(json_data).unwrap();
+    assert_eq!(envelope.response.status, "ok");
+    let result = envelope.response.data.unwrap().search_result.unwrap();
+    assert_eq!(result.song.len(), 1);
+    assert_eq!(result.song[0].title, "Tokyo Drift");
+}

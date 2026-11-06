@@ -1247,6 +1247,41 @@ pub async fn get_playlist(
             suggestions: None,
         });
     }
+    if id == "FEmusic_liked_videos" || id == "songs" {
+        let client = state.subsonic_client().await?;
+        let (items, continuation) = client.get_all_songs(0, 500).await.map_err(|e| e.to_string())?;
+        let count = items.len();
+        return Ok(PlaylistPage {
+            title: Some("Songs".into()),
+            subtitle: Some(format!("{count} songs")),
+            thumbnail: None,
+            description: Some("All songs in your Navidrome library".into()),
+            privacy: None,
+            cover: None,
+            items,
+            continuation,
+            owned: false,
+            collaborative: false,
+            sort_menu: None,
+            suggestions: None,
+        });
+    }
+    if id == "FEmusic_library_privately_owned_tracks" || id == "uploads" {
+        return Ok(PlaylistPage {
+            title: Some("Uploads".into()),
+            subtitle: Some("0 uploads".into()),
+            thumbnail: None,
+            description: Some("Uploaded tracks".into()),
+            privacy: None,
+            cover: None,
+            items: Vec::new(),
+            continuation: None,
+            owned: false,
+            collaborative: false,
+            sort_menu: None,
+            suggestions: None,
+        });
+    }
     if is_local_playlist(&id) {
         return local_playlist_page(&state, &id);
     }
@@ -1349,10 +1384,20 @@ fn now_secs() -> i64 {
 /// `total` is the playlist's track count.
 #[tauri::command]
 pub async fn get_playlist_more(
-    _state: St<'_>,
-    _token: String,
+    state: St<'_>,
+    token: String,
     _total: Option<usize>,
 ) -> Result<PlaylistContinuation, String> {
+    if let Some(offset_str) = token.strip_prefix("songs_offset:") {
+        if let Ok(offset) = offset_str.parse::<usize>() {
+            let client = state.subsonic_client().await?;
+            let (items, continuation) = client.get_all_songs(offset, 500).await.map_err(|e| e.to_string())?;
+            return Ok(PlaylistContinuation {
+                items,
+                continuation,
+            });
+        }
+    }
     Ok(PlaylistContinuation {
         items: Vec::new(),
         continuation: None,

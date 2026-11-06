@@ -631,6 +631,51 @@ impl SubsonicClient {
         })
     }
 
+    pub async fn get_all_songs(&self, offset: usize, count: usize) -> Result<(Vec<SongItem>, Option<String>), Error> {
+        let offset_str = offset.to_string();
+        let count_str = count.to_string();
+        let data: SearchResult3Container = self
+            .get_json(
+                "search3",
+                &[
+                    ("query", ""),
+                    ("artistCount", "0"),
+                    ("albumCount", "0"),
+                    ("songCount", &count_str),
+                    ("songOffset", &offset_str),
+                ],
+            )
+            .await?;
+
+        let res = data.search_result.unwrap_or(SearchResult3 {
+            artist: Vec::new(),
+            album: Vec::new(),
+            song: Vec::new(),
+        });
+
+        let has_more = res.song.len() >= count;
+        let next_continuation = if has_more {
+            Some(format!("songs_offset:{}", offset + res.song.len()))
+        } else {
+            None
+        };
+
+        let songs = res
+            .song
+            .into_iter()
+            .map(|s| {
+                let cover = s
+                    .cover_art
+                    .as_deref()
+                    .or(s.album_id.as_deref())
+                    .map(|c| self.cover_art_url(c, Some(300)));
+                child_to_song_item(&s, cover)
+            })
+            .collect();
+
+        Ok((songs, next_continuation))
+    }
+
     pub async fn get_song(&self, id: &str) -> Result<SongItem, Error> {
         let data: SongContainer = self.get_json("getSong", &[("id", id)]).await?;
         let song = data.song.ok_or(Error::MissingData)?;
