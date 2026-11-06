@@ -68,7 +68,7 @@
 
 	onMount(async () => {
 		const top = (await api.topArtists(TOP).catch(() => []))
-			.flatMap(({ id, plays }) => (id?.startsWith('UC') ? [{ id, plays }] : []))
+			.flatMap(({ id, plays }) => (id ? [{ id, plays }] : []))
 			.slice(0, COUNT + SLACK);
 		ids = top.map((a) => a.id);
 		if (ids.length < MIN) {

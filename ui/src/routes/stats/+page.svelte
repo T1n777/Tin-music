@@ -134,7 +134,7 @@
 	const asked = new Set<string>();
 	$effect(() => {
 		for (const { id } of stats?.topArtists ?? []) {
-			if (!id?.startsWith('UC') || asked.has(id)) continue;
+			if (!id || asked.has(id)) continue;
 			asked.add(id);
 			artistPage(id).then((p) => {
 				const src = p?.avatar ?? p?.thumbnail;
