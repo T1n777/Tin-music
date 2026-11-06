@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import * as api from '$lib/api';
-	import { loadLibrary, refreshView, toast, ui } from '$lib/player.svelte';
+	import { auth, loadLibrary, loadLibraryExtras, refreshView, toast, ui } from '$lib/player.svelte';
 
 	let url = $state('');
 	let username = $state('');
@@ -35,9 +35,11 @@
 		try {
 			const info = await api.navidromeConnect(cleanUrl, cleanUser, password);
 			toast.success(`Connected to Navidrome ${info.version ? `(v${info.version})` : ''}`);
+			auth.account = await api.getAccount();
 			close();
 			refreshView();
 			loadLibrary(true);
+			loadLibraryExtras(true);
 		} catch (e) {
 			error = String(e);
 			toast.error(`Connection failed: ${e}`);

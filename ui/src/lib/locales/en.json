@@ -247,6 +247,12 @@
 		"move_section": "Move {title}",
 		"moved_section": "{title} moved to position {position} of {total}",
 		"kinds": {
+			"newest": "Recently Added",
+			"frequent": "Most Played",
+			"recent": "Recently Played",
+			"random": "Random Mix",
+			"starred": "Favorite Albums",
+			"explore": "Explore Collection",
 			"listen_again": "Listen again",
 			"quick_picks": "Quick picks",
 			"from_library": "From your library",

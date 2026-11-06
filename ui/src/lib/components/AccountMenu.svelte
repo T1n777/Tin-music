@@ -135,8 +135,8 @@
 </script>
 
 <button
-	onclick={openMenu}
-	title={auth.account?.signedIn ? (auth.account.name ?? t('nav.account')) : t('nav.sign_in')}
+	onclick={auth.account?.signedIn ? openMenu : openConnect}
+	title={auth.account?.signedIn ? (auth.account.name ?? t('nav.account')) : 'Connect to Navidrome'}
 	aria-expanded={menuOpen}
 	class="flex h-full cursor-pointer items-center gap-2 px-2.5 text-xs transition-colors hover:bg-muted aria-expanded:bg-muted"
 >
@@ -151,17 +151,19 @@
 			class="shrink-0 rounded-full object-cover ring-1 ring-border"
 		/>
 	{:else}
-		<HugeiconsIcon icon={UserCircleIcon} class="h-5 w-5 shrink-0 text-muted-foreground" />
+		<HugeiconsIcon icon={ServerIcon} class="h-4 w-4 shrink-0 text-muted-foreground" />
 	{/if}
 	<span class="hidden max-w-28 truncate font-medium lg:block">
-		{auth.account?.signedIn ? (auth.account.name ?? t('nav.account')) : t('nav.sign_in')}
+		{auth.account?.signedIn ? (auth.account.name ?? t('nav.account')) : 'Connect'}
 	</span>
-	<HugeiconsIcon
-		icon={ArrowDown01Icon}
-		class="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 lg:block {menuOpen
-			? 'rotate-180'
-			: ''}"
-	/>
+	{#if auth.account?.signedIn}
+		<HugeiconsIcon
+			icon={ArrowDown01Icon}
+			class="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 lg:block {menuOpen
+				? 'rotate-180'
+				: ''}"
+		/>
+	{/if}
 </button>
 
 {#if menuOpen}

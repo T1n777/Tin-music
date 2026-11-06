@@ -112,7 +112,7 @@
 	const homeKinds = new Set<string>(HOME_KINDS);
 	const everything = $derived(!!selected || auth.account?.signedIn === false);
 	const feed = $derived(
-		home?.sections.filter((s) => !isForgotten(s) && (everything || homeKinds.has(s.kind!))) ?? []
+		home?.sections.filter((s) => !isForgotten(s) && (everything || !s.kind || homeKinds.has(s.kind))) ?? []
 	);
 
 	// --- the arrangement the user set in Edit home (personal.ts) --------------------------------

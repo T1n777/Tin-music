@@ -1691,6 +1691,9 @@ export function initApp(mini = false): () => void {
 				openChannelPicker(true);
 				return;
 			}
+			if (!a.signedIn) {
+				openServerLogin();
+			}
 			loadLibrary();
 			// Saved albums and artists too, rather than when the first card menu opens: that menu is
 			// already on screen by the time they arrive, offering "Save to library" for albums the

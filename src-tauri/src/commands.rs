@@ -2803,7 +2803,8 @@ pub async fn navidrome_connect(
         *guard = Some(client);
     }
 
-    let _ = state.app.emit("auth-changed", ());
+    let snapshot = state.account_snapshot();
+    let _ = state.app.emit("auth-changed", &snapshot);
     Ok(info)
 }
 
@@ -2827,7 +2828,7 @@ pub async fn navidrome_disconnect(state: St<'_>) -> Result<(), String> {
         let mut guard = state.subsonic.write().await;
         *guard = None;
     }
-    let _ = state.app.emit("auth-changed", ());
+    let _ = state.app.emit("auth-changed", serde_json::json!({ "signedIn": false }));
     Ok(())
 }
 

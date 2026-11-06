@@ -347,6 +347,12 @@ export function orderLibrary(items: BrowseItem[], p: Personal): BrowseItem[] {
  * Forgotten favourites is a kind too, but home renders it as one of ours (`@forgotten`).
  */
 export const HOME_KINDS = [
+	'newest',
+	'frequent',
+	'recent',
+	'random',
+	'starred',
+	'explore',
 	'listen_again',
 	'quick_picks',
 	'from_library',

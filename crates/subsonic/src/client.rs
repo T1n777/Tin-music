@@ -222,10 +222,6 @@ impl SubsonicClient {
     pub async fn get_home_with_params(&self, params: Option<&str>) -> Result<HomePage, Error> {
         let chips = vec![
             HomeChip {
-                title: "All".to_string(),
-                params: "all".to_string(),
-            },
-            HomeChip {
                 title: "Recently Added".to_string(),
                 params: "newest".to_string(),
             },
@@ -380,6 +376,19 @@ impl SubsonicClient {
                             items,
                             kind: Some("starred".to_string()),
                         });
+                    }
+                }
+
+                if sections.len() < 3 {
+                    if let Ok(explore) = self.get_album_list("alphabeticalByName", 12, 0).await {
+                        if !explore.is_empty() {
+                            sections.push(Section {
+                                title: "Explore Collection".to_string(),
+                                subtitle: Some("Browse your Navidrome albums".to_string()),
+                                items: explore,
+                                kind: Some("explore".to_string()),
+                            });
+                        }
                     }
                 }
 
