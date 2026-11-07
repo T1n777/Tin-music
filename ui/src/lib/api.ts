@@ -1381,3 +1381,9 @@ export const downloadSong = (videoId: string) =>
 
 export const downloadAlbum = (albumId: string) =>
 	invoke<number>('download_album', { albumId });
+
+export const downloadPlaylist = (playlistId: string) =>
+	invoke<number>('download_playlist', { playlistId });
+
+export const downloadLibrarySongs = () =>
+	invoke<number>('download_library_songs');

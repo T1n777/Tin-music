@@ -12,7 +12,8 @@
 		CloudUploadIcon,
 		MusicNote01Icon,
 		PlayIcon,
-		ShuffleIcon
+		ShuffleIcon,
+		Download01Icon
 	} from '@hugeicons/core-free-icons';
 	import { Button } from '$lib/components/ui/button';
 	import TrackFilter, { filterTracks } from './TrackFilter.svelte';
@@ -28,7 +29,8 @@
 		openPlayer,
 		playback,
 		removeSongFromLibrary,
-		songLibraryRemoval
+		songLibraryRemoval,
+		toast
 	} from '$lib/player.svelte';
 	import { t } from '$lib/i18n.svelte';
 
@@ -226,6 +228,22 @@
 		openPlayer();
 		api.playPlaylist(songs, start, undefined, SOURCE, shuffle, token);
 	}
+
+	let downloadingAll = $state(false);
+
+	async function downloadAllSongs() {
+		if (!songs.length || downloadingAll) return;
+		downloadingAll = true;
+		toast.info('Downloading library songs to ~/Music/Tin-music/...');
+		try {
+			const count = await api.downloadLibrarySongs();
+			toast.success(`Downloaded ${count} songs to ~/Music/Tin-music/`);
+		} catch (e) {
+			toast.error(`Download failed: ${e}`);
+		} finally {
+			downloadingAll = false;
+		}
+	}
 </script>
 
 {#if loading}
@@ -284,6 +302,15 @@
 						onclick={() => play(null)}
 					>
 						<HugeiconsIcon icon={PlayIcon} class="h-4 w-4" /> {t('common.play_all')}
+					</Button>
+					<Button
+						variant="outline"
+						class="gap-2 rounded-full"
+						disabled={!songs.length || downloadingAll}
+						onclick={downloadAllSongs}
+					>
+						<HugeiconsIcon icon={Download01Icon} class="h-4 w-4" />
+						{downloadingAll ? 'Downloading...' : 'Download all'}
 					</Button>
 				</div>
 			</div>

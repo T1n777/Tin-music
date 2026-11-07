@@ -25,7 +25,8 @@
 		ArrowUpDownIcon,
 		ComputerIcon,
 		SpotifyIcon,
-		Search01Icon
+		Search01Icon,
+		Download01Icon
 	} from '@hugeicons/core-free-icons';
 	import { Button } from '$lib/components/ui/button';
 	import * as RadioGroup from '$lib/components/ui/radio-group';
@@ -413,6 +414,23 @@
 	// over one failed request. The list's own "Try again" sits at the bottom of the page.
 	function warnPartial(what: 'queued' | 'added') {
 		toast.error(t(what === 'queued' ? 'toasts.partial_playlist_queued' : 'toasts.partial_playlist_added'));
+	}
+
+	let downloadingPlaylist = $state(false);
+
+	async function downloadThisPlaylist() {
+		if (!pl?.items.length || downloadingPlaylist) return;
+		downloadingPlaylist = true;
+		menuOpen = false;
+		toast.info(`Downloading playlist "${pl.title ?? ''}" to ~/Music/Tin-music/Playlists/...`);
+		try {
+			const count = await api.downloadPlaylist(id);
+			toast.success(`Downloaded ${count} songs to ~/Music/Tin-music/Playlists/${pl.title ?? ''}`);
+		} catch (e) {
+			toast.error(`Download failed: ${e}`);
+		} finally {
+			downloadingPlaylist = false;
+		}
 	}
 
 	// One cache entry per order asked for. "No order asked for" keeps the bare key, because the
@@ -1273,6 +1291,15 @@
 								{preparing || resorting ? t('common.sorting') : t('player.play')}
 							</Button>
 							<Button
+								variant="outline"
+								class="gap-2 rounded-full"
+								disabled={!pl.items.length || downloadingPlaylist}
+								onclick={downloadThisPlaylist}
+							>
+								<HugeiconsIcon icon={Download01Icon} class="h-4 w-4" />
+								{downloadingPlaylist ? 'Downloading...' : 'Download'}
+							</Button>
+							<Button
 								variant="ghost"
 								size="icon"
 								aria-label={t('a11y.playlist_options')}
@@ -1537,6 +1564,13 @@
 				<HugeiconsIcon icon={PlayListAddIcon} class="h-4 w-4" /> {t('player.save_to_playlist')}
 			</button>
 		{/if}
+		<button
+			class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+			onclick={downloadThisPlaylist}
+			disabled={downloadingPlaylist || !pl?.items.length}
+		>
+			<HugeiconsIcon icon={Download01Icon} class="h-4 w-4" /> Download playlist
+		</button>
 		<button
 			class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
 			onclick={() => run(() => addPick(asItem()))}

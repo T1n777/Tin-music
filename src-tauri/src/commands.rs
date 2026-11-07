@@ -2902,45 +2902,85 @@ fn sanitize_filename(name: &str) -> String {
         .to_string()
 }
 
+fn get_music_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
+    app.path().audio_dir().ok()
+        .or_else(|| app.path().download_dir().ok())
+        .or_else(|| std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Music")))
+        .unwrap_or_else(|| std::env::temp_dir())
+}
+
 #[tauri::command]
 pub async fn download_song(app: tauri::AppHandle, state: St<'_>, video_id: String) -> Result<String, String> {
     let client = state.subsonic_client().await?;
-    let (filename, bytes) = client.download_song_file(&video_id).await.map_err(|e| e.to_string())?;
-
-    let base = app.path().audio_dir().ok()
-        .or_else(|| app.path().download_dir().ok())
-        .or_else(|| std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Music")))
-        .unwrap_or_else(|| std::env::temp_dir());
-
-    let target_dir = base.join("Tin-music");
+    let target_dir = get_music_dir(&app).join("Tin-music");
     std::fs::create_dir_all(&target_dir).map_err(|e| format!("Could not create download folder: {e}"))?;
-    let dest = target_dir.join(&filename);
-    tokio::fs::write(&dest, &bytes).await.map_err(|e| format!("Could not write {}: {e}", dest.display()))?;
-    Ok(dest.to_string_lossy().to_string())
+    let (filename, _new) = client.download_song_to_dir(&video_id, &target_dir).await.map_err(|e| e.to_string())?;
+    Ok(target_dir.join(filename).to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub async fn download_album(app: tauri::AppHandle, state: St<'_>, album_id: String) -> Result<usize, String> {
     let client = state.subsonic_client().await?;
     let album = client.get_album(&album_id).await.map_err(|e| e.to_string())?;
-
-    let base = app.path().audio_dir().ok()
-        .or_else(|| app.path().download_dir().ok())
-        .or_else(|| std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Music")))
-        .unwrap_or_else(|| std::env::temp_dir());
-
     let folder_name = sanitize_filename(&format!("{} - {}", album.artist.as_deref().unwrap_or("Unknown Artist"), album.title.as_deref().unwrap_or("Unknown Album")));
-    let target_dir = base.join("Tin-music").join(folder_name);
+    let target_dir = get_music_dir(&app).join("Tin-music").join(folder_name);
     std::fs::create_dir_all(&target_dir).map_err(|e| format!("Could not create folder: {e}"))?;
 
     let mut count = 0;
     for song in &album.items {
-        if let Ok((filename, bytes)) = client.download_song_file(&song.video_id).await {
-            let dest = target_dir.join(&filename);
-            if tokio::fs::write(&dest, &bytes).await.is_ok() {
+        if let Ok((_name, new)) = client.download_song_to_dir(&song.video_id, &target_dir).await {
+            if new {
                 count += 1;
             }
         }
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+pub async fn download_playlist(app: tauri::AppHandle, state: St<'_>, playlist_id: String) -> Result<usize, String> {
+    let client = state.subsonic_client().await?;
+    let playlist = client.get_playlist(&playlist_id).await.map_err(|e| e.to_string())?;
+    let folder_name = sanitize_filename(playlist.title.as_deref().unwrap_or("Playlist"));
+    let target_dir = get_music_dir(&app).join("Tin-music").join("Playlists").join(folder_name);
+    std::fs::create_dir_all(&target_dir).map_err(|e| format!("Could not create folder: {e}"))?;
+
+    let mut count = 0;
+    for song in &playlist.items {
+        if let Ok((_name, new)) = client.download_song_to_dir(&song.video_id, &target_dir).await {
+            if new {
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+pub async fn download_library_songs(app: tauri::AppHandle, state: St<'_>) -> Result<usize, String> {
+    let client = state.subsonic_client().await?;
+    let target_dir = get_music_dir(&app).join("Tin-music");
+    std::fs::create_dir_all(&target_dir).map_err(|e| format!("Could not create download folder: {e}"))?;
+
+    let mut count = 0;
+    let mut offset = 0;
+    let batch_size = 500;
+    loop {
+        let (songs, continuation) = client.get_all_songs(offset, batch_size).await.map_err(|e| e.to_string())?;
+        if songs.is_empty() {
+            break;
+        }
+        for song in &songs {
+            if let Ok((_name, new)) = client.download_song_to_dir(&song.video_id, &target_dir).await {
+                if new {
+                    count += 1;
+                }
+            }
+        }
+        if continuation.is_none() {
+            break;
+        }
+        offset += songs.len();
     }
     Ok(count)
 }
