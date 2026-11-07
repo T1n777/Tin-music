@@ -8,18 +8,23 @@
 	// Listening stats (#396): how much, what and when, from the plays this device has counted. One
 	// local query per visit, range switch or new song (`listening_stats` in Rust); the only network
 	// is the top artists' photos, through the same cache as the artist pages.
-	import { untrack } from 'svelte';
+	import { untrack, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/svelte';
 	import {
+		Album02Icon,
 		ArrowDownRight01Icon,
 		ArrowUpRight01Icon,
 		Chart02Icon,
 		Clock01Icon,
+		ComputerIcon,
 		Delete02Icon,
 		FireIcon,
 		MusicNote01Icon,
 		PlayCircleIcon,
+		RefreshIcon,
+		ServerIcon,
+		Tag01Icon,
 		UserIcon,
 		UserMultipleIcon,
 		UserStar01Icon,
@@ -111,7 +116,74 @@
 		stats?.topSongs.map((s) => ({ ...s.song, play_count: num.format(s.plays) })) ?? []
 	);
 	const nowId = $derived(playback.now?.videoId);
-	const cover = $derived(stats?.topSongs[0]?.song.thumbnail ?? stats?.topArtists[0]?.thumbnail);
+
+	let isNavidrome = $state(false);
+	let navStats = $state.raw<api.NavidromeStats | null>(null);
+	let navLoading = $state(false);
+	let navError = $state<string | null>(null);
+	type StatSource = 'server' | 'local';
+	let source = $state<StatSource>('server');
+
+	async function checkNavidrome() {
+		try {
+			const status = await api.navidromeStatus();
+			isNavidrome = !!status;
+			if (status) {
+				source = 'server';
+				await loadNavidromeStats();
+			} else {
+				source = 'local';
+			}
+		} catch {
+			isNavidrome = false;
+			source = 'local';
+		}
+	}
+
+	async function loadNavidromeStats() {
+		navLoading = true;
+		navError = null;
+		try {
+			navStats = await api.getNavidromeStats();
+		} catch (e) {
+			navError = String(e);
+		} finally {
+			navLoading = false;
+		}
+	}
+
+	onMount(() => {
+		checkNavidrome();
+	});
+
+	const navTotal = $derived(bigDuration(navStats?.totalSecs ?? 0, tag));
+	const navSongs = $derived(
+		navStats?.topSongs.map((s) => ({ ...s.song, play_count: num.format(s.plays) })) ?? []
+	);
+
+	function playNav(i: number) {
+		openPlayer();
+		api.playPlaylist(navSongs, i, undefined, t('stats.top_songs'));
+	}
+
+	$effect(() => {
+		if (source === 'server' && navStats?.topArtists) {
+			for (const { id } of navStats.topArtists) {
+				if (!id || asked.has(id)) continue;
+				asked.add(id);
+				artistPage(id).then((p) => {
+					const src = p?.avatar ?? p?.thumbnail;
+					if (src) photos = { ...photos, [id]: src };
+				});
+			}
+		}
+	});
+
+	const cover = $derived(
+		source === 'server'
+			? navStats?.topSongs[0]?.song.thumbnail ?? navStats?.topArtists[0]?.thumbnail ?? navStats?.topAlbums[0]?.thumbnail
+			: stats?.topSongs[0]?.song.thumbnail ?? stats?.topArtists[0]?.thumbnail
+	);
 
 	const summary = $derived(
 		shown === 'all'
@@ -240,7 +312,42 @@
 
 		<div class="flex flex-wrap items-center justify-between gap-4 px-6 pt-10">
 			<h1 class="font-heading text-2xl font-bold tracking-tight">{t('stats.title')}</h1>
-			{#if stats?.firstAt}
+			{#if isNavidrome}
+				<div class="flex flex-wrap items-center gap-2">
+					<Tabs.Root value={source} onValueChange={(v) => (source = v as StatSource)}>
+						<Tabs.List>
+							<Tabs.Trigger value="server" class="gap-1.5 px-3">
+								<HugeiconsIcon strokeWidth={STROKE} icon={ServerIcon} class="h-4 w-4" />
+								{t('stats.navidrome_tab')}
+							</Tabs.Trigger>
+							<Tabs.Trigger value="local" class="gap-1.5 px-3">
+								<HugeiconsIcon strokeWidth={STROKE} icon={ComputerIcon} class="h-4 w-4" />
+								{t('stats.local_tab')}
+							</Tabs.Trigger>
+						</Tabs.List>
+					</Tabs.Root>
+					{#if source === 'server'}
+						<Button
+							variant="ghost"
+							size="sm"
+							class="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+							disabled={navLoading}
+							onclick={async () => {
+								await loadNavidromeStats();
+								toast.success(t('stats.synced_navidrome'));
+							}}
+						>
+							<HugeiconsIcon
+								strokeWidth={STROKE}
+								icon={RefreshIcon}
+								class="h-3.5 w-3.5 {navLoading ? 'animate-spin' : ''}"
+							/>
+							{t('stats.sync_navidrome')}
+						</Button>
+					{/if}
+				</div>
+			{/if}
+			{#if source === 'local' && stats?.firstAt}
 				<Tabs.Root value={range} onValueChange={(v) => (range = v as Range)}>
 					<Tabs.List>
 						{#each RANGES as r (r)}
@@ -251,7 +358,49 @@
 			{/if}
 		</div>
 
-		{#if stats?.firstAt}
+		{#if source === 'server'}
+			{#if navStats}
+				<div class="content-in px-6 pt-6">
+					<p class="font-heading text-6xl font-bold leading-none tracking-tight tabular-nums sm:text-7xl">
+						{#each navTotal as part, i (i)}
+							<span>{part.n}</span><span
+								class="ml-1 mr-4 text-3xl font-semibold text-muted-foreground last:mr-0 sm:text-4xl"
+								>{part.unit}</span
+							>
+						{/each}
+					</p>
+					<p class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+						<span>{t('stats.server_stats_subtitle')}</span>
+						<span
+							class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary"
+						>
+							<HugeiconsIcon strokeWidth={STROKE} icon={ServerIcon} class="h-3.5 w-3.5" />
+							{navStats.username} · {navStats.serverUrl}
+						</span>
+					</p>
+				</div>
+				<div class="content-in grid grid-cols-2 gap-3 px-6 pt-8 lg:grid-cols-4">
+					{@render tile(PlayCircleIcon, t('stats.plays'), num.format(navStats.totalPlays))}
+					{@render tile(
+						MusicNote01Icon,
+						t('common.songs'),
+						num.format(navStats.playedSongs),
+						`${num.format(navStats.totalSongs)} total`
+					)}
+					{@render tile(UserMultipleIcon, t('common.artists'), num.format(navStats.totalArtists))}
+					{@render tile(Album02Icon, t('common.albums'), num.format(navStats.totalAlbums))}
+				</div>
+			{:else if navLoading}
+				<div class="px-6 pt-6" aria-hidden="true">
+					<Skeleton class="h-16 w-72 rounded-lg" />
+					<Skeleton class="mt-4 h-4 w-56 rounded" />
+					<div class="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+						{#each Array(4) as _, i (i)}<Skeleton class="h-[5.25rem] rounded-2xl" />{/each}
+					</div>
+					<Skeleton class="mt-12 h-56 w-full rounded-2xl" />
+				</div>
+			{/if}
+		{:else if stats?.firstAt}
 			<div class="content-in px-6 pt-6">
 				<p class="font-heading text-6xl font-bold leading-none tracking-tight tabular-nums sm:text-7xl">
 					{#each total as part, i (i)}
@@ -271,7 +420,6 @@
 								? 'bg-primary/10 text-primary'
 								: 'bg-foreground/[0.06] text-foreground/70'}"
 						>
-							<!-- altIcon/showAlt, not a ternary: `icon` is read once at mount. -->
 							<HugeiconsIcon
 								icon={ArrowUpRight01Icon}
 								strokeWidth={STROKE}
@@ -317,137 +465,101 @@
 		{/if}
 	</header>
 
-	{#if error && !stats}
-		<div class="px-6 pt-6"><ErrorState message={error} onRetry={() => load(range)} /></div>
-	{:else if stats && !stats.firstAt}
-		<!-- Nothing counted yet: say what this page becomes, rather than a wall of zeros. -->
-		<div class="content-in flex flex-col items-center gap-3 px-6 py-24 text-center">
-			<div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-				<HugeiconsIcon strokeWidth={STROKE} icon={Chart02Icon} class="h-8 w-8" />
-			</div>
-			<h2 class="font-heading text-xl font-bold tracking-tight">{t('stats.empty_title')}</h2>
-			<p class="max-w-sm text-sm text-muted-foreground">{t('stats.empty')}</p>
-			<p class="max-w-sm text-xs text-muted-foreground/70">{t('stats.on_device')}</p>
-		</div>
-	{:else if stats}
-		<div class="content-in flex flex-col gap-12 px-6 pb-10 pt-12">
-			<section>
-				<SectionHeading strokeWidth={STROKE} title={t('stats.activity')} icon={Chart02Icon} />
-				<div class="mb-4 flex flex-wrap gap-x-10 gap-y-3">
-					{@render fact(
-						t(monthly ? 'stats.monthly_average' : 'stats.daily_average'),
-						listened(average, tag)
-					)}
-					{#if peak}
-						{@render fact(
-							t(monthly ? 'stats.busiest_month' : 'stats.busiest_day'),
-							fmt(
-								monthly
-									? { month: 'long', year: 'numeric' }
-									: { weekday: 'short', month: 'short', day: 'numeric' }
-							).format(peak.date),
-							listened(peak.secs, tag)
-						)}
-					{/if}
-				</div>
-				<ListeningChart bars={chart} {monthly} peak={peak?.key} />
-				{#if !stats.plays}
-					<p class="mt-4 text-sm text-muted-foreground">{t('stats.nothing_in_range')}</p>
-				{/if}
-			</section>
-
-			{#if stats.plays}
-				<div class="grid gap-12 xl:grid-cols-2">
-					{#if stats.topArtists.length}
-						{@const top = stats.topArtists[0]}
-						<section class="min-w-0">
-							<SectionHeading strokeWidth={STROKE} title={t('stats.top_artists')} icon={UserStar01Icon} />
-							<button
-								class="flex w-full items-center gap-5 rounded-2xl bg-foreground/[0.04] p-4 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-foreground/[0.07]"
-								disabled={!top.id}
-								onclick={() => openArtist(top)}
-							>
-								<div class="h-28 w-28 shrink-0 overflow-hidden rounded-full bg-muted shadow-lg">
-									{@render avatar(top)}
-								</div>
-								<div class="min-w-0">
-									<div class="text-xs font-semibold tabular-nums text-primary">01</div>
-									<div class="truncate font-heading text-2xl font-bold tracking-tight">{top.name}</div>
-									<div class="mt-1 text-sm text-muted-foreground">
-										{listened(top.secs, tag)} · {t('library.play_count', {
-											count: num.format(top.plays)
-										})}
+	{#if source === 'server'}
+		{#if navError && !navStats}
+			<div class="px-6 pt-6"><ErrorState message={navError} onRetry={loadNavidromeStats} /></div>
+		{:else if navStats}
+			<div class="content-in flex flex-col gap-12 px-6 pb-10 pt-12">
+				{#if navStats.topArtists.length || navSongs.length}
+					<div class="grid gap-12 xl:grid-cols-2">
+						{#if navStats.topArtists.length}
+							{@const top = navStats.topArtists[0]}
+							<section class="min-w-0">
+								<SectionHeading strokeWidth={STROKE} title={t('stats.top_artists')} icon={UserStar01Icon} />
+								<button
+									class="flex w-full items-center gap-5 rounded-2xl bg-foreground/[0.04] p-4 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-foreground/[0.07]"
+									disabled={!top.id}
+									onclick={() => openArtist(top)}
+								>
+									<div class="h-28 w-28 shrink-0 overflow-hidden rounded-full bg-muted shadow-lg">
+										{@render avatar(top)}
 									</div>
-									{#if stats.secs}
-										<div class="mt-0.5 text-sm text-muted-foreground">
-											{t('stats.share', { percent: percent.format(top.secs / stats.secs) })}
+									<div class="min-w-0">
+										<div class="text-xs font-semibold tabular-nums text-primary">01</div>
+										<div class="truncate font-heading text-2xl font-bold tracking-tight">{top.name}</div>
+										<div class="mt-1 text-sm text-muted-foreground">
+											{listened(top.secs, tag)} · {t('library.play_count', {
+												count: num.format(top.plays)
+											})}
 										</div>
-									{/if}
-								</div>
-							</button>
-							<!-- No transition on the rows: a hover fade on repeated rows is what costs frames
-							     (docs/UI-PERFORMANCE.md). -->
-							<ol class="mt-2">
-								{#each stats.topArtists.slice(1) as a, i (a.name)}
-									<li>
-										<button
-											class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left enabled:cursor-pointer enabled:hover:bg-foreground/5"
-											disabled={!a.id}
-											onclick={() => openArtist(a)}
-										>
-											<span class="w-5 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
-												{String(i + 2).padStart(2, '0')}
-											</span>
-											<div class="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
-												{@render avatar(a)}
+										{#if navStats.totalSecs}
+											<div class="mt-0.5 text-sm text-muted-foreground">
+												{t('stats.share', { percent: percent.format(top.secs / navStats.totalSecs) })}
 											</div>
-											<div class="min-w-0 flex-1">
-												<div class="truncate text-sm font-medium">{a.name}</div>
-												<!-- Measured against #1, so the bars read as how close each one came. -->
-												<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-foreground/[0.06]">
-													<div
-														class="h-full rounded-full bg-primary/60"
-														style="width:{top.secs ? (a.secs / top.secs) * 100 : 0}%"
-													></div>
+										{/if}
+									</div>
+								</button>
+								<ol class="mt-2">
+									{#each navStats.topArtists.slice(1) as a, i (a.name)}
+										<li>
+											<button
+												class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left enabled:cursor-pointer enabled:hover:bg-foreground/5"
+												disabled={!a.id}
+												onclick={() => openArtist(a)}
+											>
+												<span class="w-5 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
+													{String(i + 2).padStart(2, '0')}
+												</span>
+												<div class="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
+													{@render avatar(a)}
 												</div>
-											</div>
-											<!-- A fixed width, so every bar's track ends at the same place whatever
-											     the time beside it says. -->
-											<span class="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-												{listened(a.secs, tag)}
-											</span>
-										</button>
-									</li>
+												<div class="min-w-0 flex-1">
+													<div class="truncate text-sm font-medium">{a.name}</div>
+													<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-foreground/[0.06]">
+														<div
+															class="h-full rounded-full bg-primary/60"
+															style="width:{top.secs ? (a.secs / top.secs) * 100 : 0}%"
+														></div>
+													</div>
+												</div>
+												<span class="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+													{listened(a.secs, tag)}
+												</span>
+											</button>
+										</li>
+									{/each}
+								</ol>
+							</section>
+						{/if}
+						{#if navSongs.length}
+							<section class="min-w-0">
+								<SectionHeading strokeWidth={STROKE} title={t('stats.top_songs')} icon={MusicNote01Icon} />
+								{#each navSongs as song, i (song.video_id)}
+									<TrackRow
+										{song}
+										index={i}
+										showPlayCount
+										active={song.video_id === nowId}
+										onplay={() => playNav(i)}
+										onAdd={() => openAddToPlaylist(song)}
+									/>
 								{/each}
-							</ol>
-						</section>
-					{/if}
-					<section class="min-w-0">
-						<SectionHeading strokeWidth={STROKE} title={t('stats.top_songs')} icon={MusicNote01Icon} />
-						{#each songs as song, i (song.video_id)}
-							<TrackRow
-								{song}
-								index={i}
-								showPlayCount
-								active={song.video_id === nowId}
-								onplay={() => play(i)}
-								onAdd={() => openAddToPlaylist(song)}
-							/>
-						{/each}
-					</section>
-				</div>
+							</section>
+						{/if}
+					</div>
+				{/if}
 
-				{#if stats.topAlbums.length}
+				{#if navStats.topAlbums.length}
 					<section>
-						<SectionHeading strokeWidth={STROKE} title={t('stats.top_albums')} icon={Vynil03Icon} />
+						<SectionHeading strokeWidth={STROKE} title={t('stats.frequent_albums')} icon={Vynil03Icon} />
 						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-							{#each stats.topAlbums as al (al.id)}
+							{#each navStats.topAlbums as al (al.id)}
 								<MediaCard
 									item={{
 										kind: 'album',
 										id: al.id,
 										title: al.title,
-										subtitle: [al.artist, listened(al.secs, tag)].filter(Boolean).join(' · '),
+										subtitle: [al.artist, al.plays ? `${num.format(al.plays)} plays` : ''].filter(Boolean).join(' · '),
 										thumbnail: al.thumbnail ?? undefined
 									}}
 								/>
@@ -456,42 +568,223 @@
 					</section>
 				{/if}
 
-				<section>
-					<SectionHeading strokeWidth={STROKE} title={t('stats.when')} icon={Clock01Icon} />
-					<div class="grid gap-8 lg:grid-cols-[16rem_minmax(0,1fr)]">
-						<ListeningDayparts hours={stats.hours} />
-						<div class="min-w-0">
-							{#if when}
-								<div class="mb-4 flex flex-wrap gap-x-10 gap-y-3">
-									{@render fact(
-										t('stats.busiest_weekday'),
-										fmt({ weekday: 'long' }).format(new Date(2026, 0, 4 + when.day))
-									)}
-									{@render fact(
-										t('stats.busiest_hour'),
-										fmt({ hour: 'numeric' }).format(new Date(2026, 0, 4, when.hour))
-									)}
-								</div>
-							{/if}
-							<ListeningHours hours={stats.hours} />
+				{#if navStats.recentAlbums.length}
+					<section>
+						<SectionHeading strokeWidth={STROKE} title={t('stats.recent_albums')} icon={Clock01Icon} />
+						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+							{#each navStats.recentAlbums as al (al.id)}
+								<MediaCard
+									item={{
+										kind: 'album',
+										id: al.id,
+										title: al.title,
+										subtitle: [al.artist, al.plays ? `${num.format(al.plays)} plays` : ''].filter(Boolean).join(' · '),
+										thumbnail: al.thumbnail ?? undefined
+									}}
+								/>
+							{/each}
 						</div>
-					</div>
-				</section>
-			{/if}
+					</section>
+				{/if}
 
-			<footer class="flex flex-wrap items-center justify-between gap-3 pt-4">
-				<p class="text-xs text-muted-foreground">{t('stats.on_device')}</p>
-				<Button
-					variant="ghost"
-					size="sm"
-					class="gap-1.5 text-muted-foreground hover:text-destructive"
-					onclick={() => (confirming = true)}
-				>
-					<HugeiconsIcon strokeWidth={STROKE} icon={Delete02Icon} class="h-4 w-4" />
-					{t('stats.clear')}
-				</Button>
-			</footer>
-		</div>
+				{#if navStats.genres.length}
+					<section>
+						<SectionHeading strokeWidth={STROKE} title={t('stats.top_genres')} icon={Tag01Icon} />
+						<div class="flex flex-wrap gap-2">
+							{#each navStats.genres as g (g.name)}
+								<div class="flex items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3.5 py-1.5 text-sm font-medium">
+									<span>{g.name}</span>
+									<span class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
+										{g.songCount} {g.songCount === 1 ? t('common.song_singular') : t('common.songs')}
+									</span>
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/if}
+
+				<footer class="flex flex-wrap items-center justify-between gap-3 pt-4">
+					<p class="text-xs text-muted-foreground">{t('stats.server_stats_subtitle')} · {navStats.username} @ {navStats.serverUrl}</p>
+				</footer>
+			</div>
+		{/if}
+	{:else}
+		{#if error && !stats}
+			<div class="px-6 pt-6"><ErrorState message={error} onRetry={() => load(range)} /></div>
+		{:else if stats && !stats.firstAt}
+			<!-- Nothing counted yet: say what this page becomes, rather than a wall of zeros. -->
+			<div class="content-in flex flex-col items-center gap-3 px-6 py-24 text-center">
+				<div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+					<HugeiconsIcon strokeWidth={STROKE} icon={Chart02Icon} class="h-8 w-8" />
+				</div>
+				<h2 class="font-heading text-xl font-bold tracking-tight">{t('stats.empty_title')}</h2>
+				<p class="max-w-sm text-sm text-muted-foreground">{t('stats.empty')}</p>
+				<p class="max-w-sm text-xs text-muted-foreground/70">{t('stats.on_device')}</p>
+			</div>
+		{:else if stats}
+			<div class="content-in flex flex-col gap-12 px-6 pb-10 pt-12">
+				<section>
+					<SectionHeading strokeWidth={STROKE} title={t('stats.activity')} icon={Chart02Icon} />
+					<div class="mb-4 flex flex-wrap gap-x-10 gap-y-3">
+						{@render fact(
+							t(monthly ? 'stats.monthly_average' : 'stats.daily_average'),
+							listened(average, tag)
+						)}
+						{#if peak}
+							{@render fact(
+								t(monthly ? 'stats.busiest_month' : 'stats.busiest_day'),
+								fmt(
+									monthly
+										? { month: 'long', year: 'numeric' }
+										: { weekday: 'short', month: 'short', day: 'numeric' }
+								).format(peak.date),
+								listened(peak.secs, tag)
+							)}
+						{/if}
+					</div>
+					<ListeningChart bars={chart} {monthly} peak={peak?.key} />
+					{#if !stats.plays}
+						<p class="mt-4 text-sm text-muted-foreground">{t('stats.nothing_in_range')}</p>
+					{/if}
+				</section>
+
+				{#if stats.plays}
+					<div class="grid gap-12 xl:grid-cols-2">
+						{#if stats.topArtists.length}
+							{@const top = stats.topArtists[0]}
+							<section class="min-w-0">
+								<SectionHeading strokeWidth={STROKE} title={t('stats.top_artists')} icon={UserStar01Icon} />
+								<button
+									class="flex w-full items-center gap-5 rounded-2xl bg-foreground/[0.04] p-4 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-foreground/[0.07]"
+									disabled={!top.id}
+									onclick={() => openArtist(top)}
+								>
+									<div class="h-28 w-28 shrink-0 overflow-hidden rounded-full bg-muted shadow-lg">
+										{@render avatar(top)}
+									</div>
+									<div class="min-w-0">
+										<div class="text-xs font-semibold tabular-nums text-primary">01</div>
+										<div class="truncate font-heading text-2xl font-bold tracking-tight">{top.name}</div>
+										<div class="mt-1 text-sm text-muted-foreground">
+											{listened(top.secs, tag)} · {t('library.play_count', {
+												count: num.format(top.plays)
+											})}
+										</div>
+										{#if stats.secs}
+											<div class="mt-0.5 text-sm text-muted-foreground">
+												{t('stats.share', { percent: percent.format(top.secs / stats.secs) })}
+											</div>
+										{/if}
+									</div>
+								</button>
+								<!-- No transition on the rows: a hover fade on repeated rows is what costs frames
+								     (docs/UI-PERFORMANCE.md). -->
+								<ol class="mt-2">
+									{#each stats.topArtists.slice(1) as a, i (a.name)}
+										<li>
+											<button
+												class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left enabled:cursor-pointer enabled:hover:bg-foreground/5"
+												disabled={!a.id}
+												onclick={() => openArtist(a)}
+											>
+												<span class="w-5 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
+													{String(i + 2).padStart(2, '0')}
+												</span>
+												<div class="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
+													{@render avatar(a)}
+												</div>
+												<div class="min-w-0 flex-1">
+													<div class="truncate text-sm font-medium">{a.name}</div>
+													<!-- Measured against #1, so the bars read as how close each one came. -->
+													<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-foreground/[0.06]">
+														<div
+															class="h-full rounded-full bg-primary/60"
+															style="width:{top.secs ? (a.secs / top.secs) * 100 : 0}%"
+														></div>
+													</div>
+												</div>
+												<!-- A fixed width, so every bar's track ends at the same place whatever
+												     the time beside it says. -->
+												<span class="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+													{listened(a.secs, tag)}
+												</span>
+											</button>
+										</li>
+									{/each}
+								</ol>
+							</section>
+						{/if}
+						<section class="min-w-0">
+							<SectionHeading strokeWidth={STROKE} title={t('stats.top_songs')} icon={MusicNote01Icon} />
+							{#each songs as song, i (song.video_id)}
+								<TrackRow
+									{song}
+									index={i}
+									showPlayCount
+									active={song.video_id === nowId}
+									onplay={() => play(i)}
+									onAdd={() => openAddToPlaylist(song)}
+								/>
+							{/each}
+						</section>
+					</div>
+
+					{#if stats.topAlbums.length}
+						<section>
+							<SectionHeading strokeWidth={STROKE} title={t('stats.top_albums')} icon={Vynil03Icon} />
+							<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+								{#each stats.topAlbums as al (al.id)}
+									<MediaCard
+										item={{
+											kind: 'album',
+											id: al.id,
+											title: al.title,
+											subtitle: [al.artist, listened(al.secs, tag)].filter(Boolean).join(' · '),
+											thumbnail: al.thumbnail ?? undefined
+										}}
+									/>
+								{/each}
+							</div>
+						</section>
+					{/if}
+
+					<section>
+						<SectionHeading strokeWidth={STROKE} title={t('stats.when')} icon={Clock01Icon} />
+						<div class="grid gap-8 lg:grid-cols-[16rem_minmax(0,1fr)]">
+							<ListeningDayparts hours={stats.hours} />
+							<div class="min-w-0">
+								{#if when}
+									<div class="mb-4 flex flex-wrap gap-x-10 gap-y-3">
+										{@render fact(
+											t('stats.busiest_weekday'),
+											fmt({ weekday: 'long' }).format(new Date(2026, 0, 4 + when.day))
+										)}
+										{@render fact(
+											t('stats.busiest_hour'),
+											fmt({ hour: 'numeric' }).format(new Date(2026, 0, 4, when.hour))
+										)}
+									</div>
+								{/if}
+								<ListeningHours hours={stats.hours} />
+							</div>
+						</div>
+					</section>
+				{/if}
+
+				<footer class="flex flex-wrap items-center justify-between gap-3 pt-4">
+					<p class="text-xs text-muted-foreground">{t('stats.on_device')}</p>
+					<Button
+						variant="ghost"
+						size="sm"
+						class="gap-1.5 text-muted-foreground hover:text-destructive"
+						onclick={() => (confirming = true)}
+					>
+						<HugeiconsIcon strokeWidth={STROKE} icon={Delete02Icon} class="h-4 w-4" />
+						{t('stats.clear')}
+					</Button>
+				</footer>
+			</div>
+		{/if}
 	{/if}
 </div>
 

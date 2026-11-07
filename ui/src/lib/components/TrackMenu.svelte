@@ -71,7 +71,8 @@
 		playlistId,
 		queueIndex,
 		linksOnly = false,
-		inLibraryList = false
+		inLibraryList = false,
+		inRecent = false
 	}: {
 		song: SongItem;
 		/** Classes for the ⋯ trigger button (positioning differs per host: inline vs overlay). */
@@ -101,6 +102,7 @@
 		 * disappear from). A song sitting in that list because its album is saved gets neither.
 		 */
 		inLibraryList?: boolean;
+		inRecent?: boolean;
 	} = $props();
 
 	// Already on the home grid: the menu offers the way out rather than a second copy.
@@ -362,7 +364,7 @@
 			<HugeiconsIcon icon={DashboardSquare02Icon} class="h-4 w-4" />
 			{isPick ? t('home.remove_shortcut') : t('home.add_shortcut')}
 		</button>
-		{#if personal.recent[song.video_id]}
+		{#if inRecent || personal.recent[song.video_id]}
 			<button
 				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10"
 				onclick={(e) => run(e, () => removeRecent(song.video_id))}

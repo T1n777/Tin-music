@@ -55,19 +55,27 @@
 		iconClass = 'h-4 w-4',
 		// Visibility lives here too: most triggers only appear on hover, but a row that has nothing
 		// else to reveal on hover shows its ⋯ all the time.
-		triggerClass = 'absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100'
+		triggerClass = 'absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100',
+		inRecent = false
 	}: {
 		item: BrowseItem;
 		showPin?: boolean;
 		vertical?: boolean;
 		iconClass?: string;
 		triggerClass?: string;
+		inRecent?: boolean;
 	} = $props();
 
 	const pinned = $derived(personal.pins.includes(item.id));
 	// Already on the home grid: the menu offers the way out rather than a second copy.
 	const isPick = $derived(personal.picks.some((p) => p.id === item.id));
-	const isRecent = $derived(!!personal.recent[item.id]);
+	const isRecent = $derived(
+		inRecent ||
+		!!personal.recent[item.id] ||
+		item.title === 'Liked Music' ||
+		item.id === 'VLLM' ||
+		item.id === 'LM'
+	);
 	// A synced row is on the account too, and dropping only the local copy would leave the card on
 	// screen with a "removed" toast under it. Signed out, the local copy is the whole library again.
 	const savedHere = $derived(
@@ -308,7 +316,16 @@
 		{#if isRecent}
 			<button
 				class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10"
-				onclick={(e) => run(e, () => removeRecent(item.id))}
+				onclick={(e) => run(e, () => {
+					removeRecent(item.id);
+					if (item.title === 'Liked Music' || item.id === 'VLLM' || item.id === 'LM') {
+						for (const k of Object.keys(personal.recent)) {
+							if (k === item.id || personal.recent[k]?.title === item.title) {
+								removeRecent(k);
+							}
+						}
+					}
+				})}
 			>
 				<HugeiconsIcon icon={Cancel01Icon} class="h-4 w-4" />
 				{t('home.remove_from_recents')}

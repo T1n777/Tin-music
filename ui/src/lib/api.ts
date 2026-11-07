@@ -1387,3 +1387,29 @@ export const downloadPlaylist = (playlistId: string) =>
 
 export const downloadLibrarySongs = () =>
 	invoke<number>('download_library_songs');
+
+export interface GenreStat {
+	name: string;
+	songCount: number;
+	albumCount: number;
+}
+
+export interface NavidromeStats {
+	totalSecs: number;
+	totalPlays: number;
+	totalSongs: number;
+	playedSongs: number;
+	totalArtists: number;
+	totalAlbums: number;
+	topSongs: TopSong[];
+	topArtists: TopArtist[];
+	topAlbums: TopAlbum[];
+	recentAlbums: TopAlbum[];
+	genres: GenreStat[];
+	username: string;
+	serverUrl: string;
+	scanCount: number;
+}
+
+export const getNavidromeStats = () =>
+	invoke<NavidromeStats>('get_navidrome_stats');

@@ -31,3 +31,4 @@ rustypipe_reports/
 /plans
 scripts/bench.sh
 scripts/triage.py
+graphify-out/

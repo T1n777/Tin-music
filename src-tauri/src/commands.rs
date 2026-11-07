@@ -2919,6 +2919,140 @@ pub async fn download_song(app: tauri::AppHandle, state: St<'_>, video_id: Strin
 }
 
 #[tauri::command]
+pub async fn get_navidrome_stats(state: St<'_>) -> Result<crate::stats::NavidromeStats, String> {
+    let client = state.subsonic_client().await?;
+    let (all_songs, _) = client.get_all_songs(0, 1000).await.map_err(|e| e.to_string())?;
+    let frequent_albums = client.get_album_list("frequent", 15, 0).await.unwrap_or_default();
+    let recent_albums = client.get_album_list("recent", 10, 0).await.unwrap_or_default();
+    let genres_raw = client.get_genres().await.unwrap_or_default();
+    let scan_status = client.get_scan_status().await.ok();
+    let artists_list = client.get_artists().await.unwrap_or_default();
+    let albums_list = client.get_album_list("alphabeticalByName", 500, 0).await.unwrap_or_default();
+
+    let mut total_plays: i64 = 0;
+    let mut total_secs: i64 = 0;
+    let mut played_songs: i64 = 0;
+    let mut artist_map: std::collections::HashMap<String, (String, Option<String>, Option<String>, i64, i64)> = std::collections::HashMap::new();
+
+    let mut scored_songs = Vec::new();
+
+    for s in &all_songs {
+        let plays = s.play_count.as_deref().and_then(|p| p.parse::<i64>().ok()).unwrap_or(0);
+        let dur = crate::state::parse_duration_ms(s.duration.as_deref()) / 1000;
+        let s_secs = plays * dur;
+
+        total_plays += plays;
+        total_secs += s_secs;
+        if plays > 0 {
+            played_songs += 1;
+            scored_songs.push((s.clone(), plays, s_secs));
+
+            if let Some(ts) = s.added_at {
+                if let Ok(json) = serde_json::to_string(s) {
+                    state.db.record_listen_if_missing(&s.video_id, &json, ts, dur);
+                }
+            }
+        }
+
+        let artist_name = if s.artists.trim().is_empty() { "Unknown Artist" } else { s.artists.as_str() };
+        let entry = artist_map.entry(artist_name.to_string()).or_insert_with(|| {
+            (artist_name.to_string(), s.artist_id.clone(), s.thumbnail.clone(), 0, 0)
+        });
+        entry.3 += plays;
+        entry.4 += s_secs;
+    }
+
+    scored_songs.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)));
+    let top_songs: Vec<crate::stats::TopSong> = scored_songs
+        .into_iter()
+        .take(10)
+        .map(|(song, plays, secs)| crate::stats::TopSong { song, plays, secs })
+        .collect();
+
+    let total_songs = all_songs.len() as i64;
+    let total_artists = if !artists_list.is_empty() { artists_list.len() as i64 } else { artist_map.len() as i64 };
+    let total_albums = if !albums_list.is_empty() { albums_list.len() as i64 } else { frequent_albums.len() as i64 };
+
+    let mut artists: Vec<_> = artist_map.into_values().collect();
+    artists.sort_by(|a, b| b.3.cmp(&a.3).then(b.4.cmp(&a.4)));
+    let top_artists: Vec<crate::stats::TopArtist> = artists
+        .into_iter()
+        .take(8)
+        .map(|(name, id, thumbnail, plays, secs)| crate::stats::TopArtist {
+            name,
+            id,
+            thumbnail,
+            plays,
+            secs,
+        })
+        .collect();
+
+    let top_albums: Vec<crate::stats::TopAlbum> = frequent_albums
+        .into_iter()
+        .take(6)
+        .map(|item| {
+            let plays = item.play_count.as_deref().and_then(|p| p.parse::<i64>().ok()).unwrap_or(0);
+            let dur = item.duration.as_deref().map(|d| crate::state::parse_duration_ms(Some(d)) / 1000).unwrap_or(0);
+            crate::stats::TopAlbum {
+                id: item.id,
+                title: item.title,
+                artist: item.subtitle.unwrap_or_default(),
+                thumbnail: item.thumbnail,
+                plays,
+                secs: plays * dur,
+            }
+        })
+        .collect();
+
+    let recent_albums_mapped: Vec<crate::stats::TopAlbum> = recent_albums
+        .into_iter()
+        .take(6)
+        .map(|item| {
+            let plays = item.play_count.as_deref().and_then(|p| p.parse::<i64>().ok()).unwrap_or(0);
+            let dur = item.duration.as_deref().map(|d| crate::state::parse_duration_ms(Some(d)) / 1000).unwrap_or(0);
+            crate::stats::TopAlbum {
+                id: item.id,
+                title: item.title,
+                artist: item.subtitle.unwrap_or_default(),
+                thumbnail: item.thumbnail,
+                plays,
+                secs: plays * dur,
+            }
+        })
+        .collect();
+
+    let mut genres: Vec<_> = genres_raw
+        .into_iter()
+        .map(|g| crate::stats::GenreStat {
+            name: g.name,
+            song_count: g.song_count.unwrap_or(0),
+            album_count: g.album_count.unwrap_or(0),
+        })
+        .collect();
+    genres.sort_by(|a, b| b.song_count.cmp(&a.song_count));
+    genres.truncate(8);
+
+    let (server_url, username, _, _) = state.db.navidrome_credentials().unwrap_or_default();
+
+    Ok(crate::stats::NavidromeStats {
+        total_secs,
+        total_plays,
+        total_songs,
+        played_songs,
+        total_artists,
+        total_albums,
+        top_songs,
+        top_artists,
+        top_albums,
+        recent_albums: recent_albums_mapped,
+        genres,
+        username,
+        server_url,
+        scan_count: scan_status.and_then(|s| s.count).unwrap_or(total_songs as u64),
+    })
+}
+
+#[tauri::command]
 pub async fn download_album(app: tauri::AppHandle, state: St<'_>, album_id: String) -> Result<usize, String> {
     let client = state.subsonic_client().await?;
     let album = client.get_album(&album_id).await.map_err(|e| e.to_string())?;

@@ -32,6 +32,7 @@ fn test_child_to_song_item() {
         play_count: Some(42),
         disc_number: Some(1),
         created: None,
+        played: None,
         starred: Some("2024-01-01".to_string()),
         album_id: Some("album_456".to_string()),
         artist_id: Some("artist_789".to_string()),

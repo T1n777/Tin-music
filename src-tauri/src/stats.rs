@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use innertube::SongItem;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::db::Listening;
 use crate::local;
@@ -51,7 +51,7 @@ pub struct Stats {
     pub best_streak: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TopSong {
     pub song: SongItem,
@@ -59,7 +59,7 @@ pub struct TopSong {
     pub secs: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TopArtist {
     pub name: String,
@@ -71,7 +71,7 @@ pub struct TopArtist {
     pub secs: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TopAlbum {
     pub id: String,
@@ -80,6 +80,33 @@ pub struct TopAlbum {
     pub thumbnail: Option<String>,
     pub plays: i64,
     pub secs: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NavidromeStats {
+    pub total_secs: i64,
+    pub total_plays: i64,
+    pub total_songs: i64,
+    pub played_songs: i64,
+    pub total_artists: i64,
+    pub total_albums: i64,
+    pub top_songs: Vec<TopSong>,
+    pub top_artists: Vec<TopArtist>,
+    pub top_albums: Vec<TopAlbum>,
+    pub recent_albums: Vec<TopAlbum>,
+    pub genres: Vec<GenreStat>,
+    pub username: String,
+    pub server_url: String,
+    pub scan_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenreStat {
+    pub name: String,
+    pub song_count: u32,
+    pub album_count: u32,
 }
 
 /// `all_time`: the window reaches back past the first play, so there's no previous one to compare.

@@ -9,12 +9,13 @@
 
 	let {
 		item,
-		triggerClass
-	}: { item: BrowseItem; triggerClass: string } = $props();
+		triggerClass,
+		inRecent = false
+	}: { item: BrowseItem; triggerClass: string; inRecent?: boolean } = $props();
 </script>
 
 {#if item.kind === 'song'}
-	<TrackMenu song={asSong(item)} onAdd={() => openAddToPlaylist(asSong(item))} {triggerClass} />
+	<TrackMenu song={asSong(item)} onAdd={() => openAddToPlaylist(asSong(item))} {triggerClass} {inRecent} />
 {:else}
-	<PlaylistMenu {item} showPin={item.kind === 'playlist'} {triggerClass} />
+	<PlaylistMenu {item} showPin={item.kind === 'playlist'} {triggerClass} {inRecent} />
 {/if}

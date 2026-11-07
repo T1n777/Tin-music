@@ -300,6 +300,14 @@ impl Db {
                 "#
             );
         }
+        if has_navidrome && conn.execute("INSERT INTO settings(key, value) VALUES('navidrome_purge_v2', '1')", []).is_ok() {
+            let _ = conn.execute_batch(
+                r#"
+                DELETE FROM listens WHERE video_id NOT IN (SELECT id FROM local_tracks) AND played_at < 1794050000;
+                DELETE FROM listen_songs WHERE video_id NOT IN (SELECT id FROM local_tracks) AND video_id NOT IN (SELECT video_id FROM listens);
+                "#
+            );
+        }
         // And the disc number (issue #315), refilled the same way.
         let _ = conn
             .execute("ALTER TABLE local_tracks ADD COLUMN disc_no INTEGER NOT NULL DEFAULT 0", []);
@@ -914,6 +922,28 @@ impl Db {
     pub fn clear_listens(&self) {
         let conn = self.0.lock().unwrap();
         let _ = conn.execute_batch("DELETE FROM listens; DELETE FROM listen_songs;");
+    }
+
+    pub fn record_listen_if_missing(&self, video_id: &str, song_json: &str, played_at: i64, secs: i64) {
+        let conn = self.0.lock().unwrap();
+        let exists: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM listens WHERE video_id = ?1 AND played_at = ?2)",
+                rusqlite::params![video_id, played_at],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        if !exists {
+            let _ = conn.execute(
+                "INSERT INTO listen_songs(video_id, song_json) VALUES(?1, ?2)
+                 ON CONFLICT(video_id) DO UPDATE SET song_json = excluded.song_json",
+                [video_id, song_json],
+            );
+            let _ = conn.execute(
+                "INSERT INTO listens(video_id, played_at, secs) VALUES(?1, ?2, ?3)",
+                rusqlite::params![video_id, played_at, secs],
+            );
+        }
     }
 
     /// The most-played songs since `since`, as `(song_json, play_count)` ranked by plays and then

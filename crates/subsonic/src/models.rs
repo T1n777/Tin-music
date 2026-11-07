@@ -61,6 +61,7 @@ pub struct Child {
     #[serde(rename = "discNumber")]
     pub disc_number: Option<u32>,
     pub created: Option<String>,
+    pub played: Option<String>,
     pub starred: Option<String>,
     #[serde(rename = "albumId")]
     pub album_id: Option<String>,
@@ -85,6 +86,7 @@ pub struct AlbumID3 {
     pub song_count: Option<u32>,
     pub duration: Option<u32>,
     pub created: Option<String>,
+    pub played: Option<String>,
     pub starred: Option<String>,
     pub year: Option<u32>,
     pub genre: Option<String>,

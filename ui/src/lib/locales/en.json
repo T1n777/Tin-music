@@ -336,7 +336,16 @@
 		"clear_title": "Clear listening history?",
 		"clear_desc": "This forgets every play counted on this device, so your stats start over and On Repeat empties. Your server history isn't touched.",
 		"clear_confirm": "Clear history",
-		"cleared": "Listening history cleared"
+		"cleared": "Listening history cleared",
+		"navidrome_tab": "Navidrome Server",
+		"local_tab": "This Device",
+		"server_stats_subtitle": "Total listening stats from your Navidrome server",
+		"frequent_albums": "Most played albums",
+		"recent_albums": "Recently played on server",
+		"top_genres": "Top genres",
+		"sync_navidrome": "Refresh server stats",
+		"synced_navidrome": "Server stats refreshed",
+		"server_info": "{username} on {serverUrl}"
 	},
 	"artist": {
 		"subscribe": "Subscribe",

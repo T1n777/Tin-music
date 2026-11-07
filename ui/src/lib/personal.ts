@@ -479,7 +479,7 @@ export function purgeLegacyYouTube(p: Personal): boolean {
 		if (id === 'VLLM' || id === 'LM' || id === 'FEmusic_liked_videos') {
 			return true;
 		}
-		if (title === 'Liked Music') return true;
+		if (title && title.toLowerCase() === 'liked music') return true;
 		if (thumb && (thumb.includes('ytimg.com') || thumb.includes('googleusercontent.com') || thumb.includes('ggpht.com'))) {
 			return true;
 		}

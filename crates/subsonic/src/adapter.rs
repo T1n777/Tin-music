@@ -14,6 +14,27 @@ pub fn format_duration(seconds: Option<u32>) -> Option<String> {
     }
 }
 
+fn parse_iso_timestamp(s: &str) -> Option<i64> {
+    let s = s.trim();
+    if s.len() < 19 {
+        return None;
+    }
+    let year: i64 = s.get(0..4)?.parse().ok()?;
+    let month: u32 = s.get(5..7)?.parse().ok()?;
+    let day: u32 = s.get(8..10)?.parse().ok()?;
+    let hour: u32 = s.get(11..13)?.parse().ok()?;
+    let min: u32 = s.get(14..16)?.parse().ok()?;
+    let sec: u32 = s.get(17..19)?.parse().ok()?;
+
+    let y = year - if month <= 2 { 1 } else { 0 };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u32;
+    let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe as i64 - 719468;
+    Some(days * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64)
+}
+
 pub fn child_to_song_item(c: &Child, cover_url: Option<String>) -> SongItem {
     let artist_str = c.artist.clone().unwrap_or_default();
     let artist_runs = if let Some(ref aid) = c.artist_id {
@@ -50,7 +71,7 @@ pub fn child_to_song_item(c: &Child, cover_url: Option<String>) -> SongItem {
         set_video_id: None,
         added_by: None,
         added_by_avatars: Vec::new(),
-        added_at: None,
+        added_at: c.played.as_deref().or(c.created.as_deref()).and_then(parse_iso_timestamp),
         rating,
         library: None,
         explicit: false,

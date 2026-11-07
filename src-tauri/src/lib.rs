@@ -1211,6 +1211,7 @@ pub fn run() {
             commands::navidrome_status,
             commands::navidrome_disconnect,
             commands::navidrome_scan_library,
+            commands::get_navidrome_stats,
             commands::download_song,
             commands::download_album,
             commands::download_playlist,
