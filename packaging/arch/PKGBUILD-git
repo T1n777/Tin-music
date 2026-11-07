@@ -1,0 +1,53 @@
+# Maintainer: Tin <https://github.com/T1n777/Tin-music>
+pkgname=tin-music-git
+_pkgname=tin-music
+pkgver=1.4.0.r13.ga877713
+pkgrel=1
+pkgdesc="A modern, lightweight desktop music player for Navidrome (Git version)"
+arch=('x86_64')
+url="https://github.com/T1n777/Tin-music"
+license=('GPL-3.0-only')
+depends=('gtk3' 'webkit2gtk-4.1' 'mpv' 'glib2' 'openssl')
+makedepends=('cargo' 'npm' 'rust' 'git')
+provides=('tin-music' 'limusic-app')
+conflicts=('tin-music' 'tin-music-bin' 'limusic-app')
+source=("${_pkgname}::git+https://github.com/T1n777/Tin-music.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "${srcdir}/${_pkgname}"
+    printf "1.4.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd "${srcdir}/${_pkgname}"
+    npm --prefix ui ci
+}
+
+build() {
+    cd "${srcdir}/${_pkgname}"
+    cargo tauri build --ignore-version-mismatches --no-sign --no-bundle
+}
+
+package() {
+    cd "${srcdir}/${_pkgname}"
+
+    install -Dm755 "target/release/limusic-app" "${pkgdir}/usr/bin/tin-music"
+    ln -s "tin-music" "${pkgdir}/usr/bin/limusic-app"
+
+    install -Dm644 "packaging/arch/tin-music.desktop" "${pkgdir}/usr/share/applications/tin-music.desktop"
+
+    install -Dm644 "src-tauri/icons/32x32.png" "${pkgdir}/usr/share/icons/hicolor/32x32/apps/tin-music.png"
+    install -Dm644 "src-tauri/icons/64x64.png" "${pkgdir}/usr/share/icons/hicolor/64x64/apps/tin-music.png"
+    install -Dm644 "src-tauri/icons/128x128.png" "${pkgdir}/usr/share/icons/hicolor/128x128/apps/tin-music.png"
+    install -Dm644 "src-tauri/icons/128x128@2x.png" "${pkgdir}/usr/share/icons/hicolor/256x256@2/apps/tin-music.png"
+    install -Dm644 "src-tauri/icons/icon.png" "${pkgdir}/usr/share/icons/hicolor/512x512/apps/tin-music.png"
+
+    ln -s "tin-music.png" "${pkgdir}/usr/share/icons/hicolor/32x32/apps/limusic-app.png"
+    ln -s "tin-music.png" "${pkgdir}/usr/share/icons/hicolor/64x64/apps/limusic-app.png"
+    ln -s "tin-music.png" "${pkgdir}/usr/share/icons/hicolor/128x128/apps/limusic-app.png"
+    ln -s "tin-music.png" "${pkgdir}/usr/share/icons/hicolor/256x256@2/apps/limusic-app.png"
+    ln -s "tin-music.png" "${pkgdir}/usr/share/icons/hicolor/512x512/apps/limusic-app.png"
+
+    install -Dm644 "LICENSE" "${pkgdir}/usr/share/licenses/${_pkgname}/LICENSE"
+}
