@@ -27,6 +27,7 @@
 	import PlaylistMenu from './PlaylistMenu.svelte';
 	import { library, personal, ui, openNewPlaylist, toggleSidebar } from '$lib/player.svelte';
 	import { mergeSaved, orderLibrary } from '$lib/personal';
+	import { appName } from '$lib/appname.svelte';
 	import { t } from '$lib/i18n.svelte';
 	import { imp } from '$lib/import.svelte';
 
@@ -110,7 +111,7 @@
 	)}"
 >
 	<div class="flex items-center justify-center px-2 py-2 {wide('lg:justify-between')}">
-		<span class="hidden font-heading text-lg font-bold tracking-tight {wide('lg:block')}">Tin-music</span>
+		<span class="hidden font-heading text-lg font-bold tracking-tight {wide('lg:block')}">{appName.current}</span>
 		<!-- Column when collapsed: the two buttons don't fit side by side in the 64px rail. -->
 		<div class="flex items-center gap-1 {collapsed ? 'flex-col' : ''}">
 			<Button

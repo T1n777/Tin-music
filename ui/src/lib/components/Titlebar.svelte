@@ -33,6 +33,7 @@
 	import AccountMenu from './AccountMenu.svelte';
 	import { updateState, triggerUpdate } from '$lib/updater.svelte';
 	import { appIcon } from '$lib/appicon.svelte';
+	import { appName } from '$lib/appname.svelte';
 	import * as api from '$lib/api';
 	import { openMiniPlayer, playback, prefs, refreshView, toast, ui } from '$lib/player.svelte';
 	import { win } from '$lib/win.svelte';
@@ -140,7 +141,7 @@
 	<span
 		class="pointer-events-none absolute inset-x-0 text-center text-xs font-medium tracking-wide text-muted-foreground"
 	>
-		Tin-music
+		{appName.current}
 	</span>
 
 	<!-- macOS overlay style floats the traffic lights over the top-left of the webview, so the row

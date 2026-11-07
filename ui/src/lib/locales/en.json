@@ -568,6 +568,8 @@
 			"load_font_dialog": "Load a font",
 			"font_filter": "Fonts",
 			"experimental": "Experimental",
+			"app_name": "App name",
+			"app_name_hint": "Custom name displayed across the window title, title bar, and sidebar.",
 			"app_icon": "App icon",
 			"app_icon_hint": "A PNG replaces the icon in the tray, this window and Alt-Tab. Shortcuts, the file manager and the Windows taskbar button keep the installed one.",
 			"app_icon_pick": "Choose…",

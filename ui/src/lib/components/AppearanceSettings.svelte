@@ -36,6 +36,7 @@
 	import { playback, toast } from '$lib/player.svelte';
 	import { thumb } from '$lib/thumb';
 	import { appIcon, chooseAppIcon } from '$lib/appicon.svelte';
+	import { appName, DEFAULT_APP_NAME, setCustomAppName } from '$lib/appname.svelte';
 	import { t, type TranslationKey } from '$lib/i18n.svelte';
 	import {
 		THEMES,
@@ -247,6 +248,25 @@
 		}
 	}
 
+	// --- Custom app name --------------------------------------------------------------------------
+	let customNameInput = $state(appName.current === DEFAULT_APP_NAME ? '' : appName.current);
+	let nameDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function updateCustomName(val: string) {
+		customNameInput = val;
+		clearTimeout(nameDebounceTimer);
+		nameDebounceTimer = setTimeout(async () => {
+			await setCustomAppName(val);
+		}, 300);
+	}
+
+	async function resetAppName() {
+		clearTimeout(nameDebounceTimer);
+		customNameInput = '';
+		await setCustomAppName(null);
+		toast.success('App name reset to Tin-music');
+	}
+
 	function resetAll() {
 		clearTimeout(commitTimer);
 		resetCustom();
@@ -394,6 +414,11 @@
 					title: t('settings.themes.zoom'),
 					desc: t('settings.themes.zoom_hint'),
 					control: zoomStepper
+				})}
+				{@render row({
+					title: t('settings.themes.app_name') ?? 'App name',
+					desc: t('settings.themes.app_name_hint') ?? 'Custom name displayed across the window title, title bar, and sidebar.',
+					control: appNameControls
 				})}
 				{@render row({
 					title: t('settings.themes.app_icon'),
@@ -783,6 +808,26 @@
 				</button>
 			</div>
 		{/each}
+	</div>
+{/snippet}
+
+{#snippet appNameControls()}
+	<div class="flex shrink-0 items-center gap-2">
+		<Input
+			value={customNameInput}
+			oninput={(e) => updateCustomName(e.currentTarget.value)}
+			placeholder="Tin-music"
+			class="h-8 w-36 text-xs"
+			spellcheck={false}
+		/>
+		<Button
+			variant="ghost"
+			size="sm"
+			onclick={resetAppName}
+			disabled={appName.current === DEFAULT_APP_NAME && !customNameInput}
+		>
+			{t('common.reset')}
+		</Button>
 	</div>
 {/snippet}
 
