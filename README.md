@@ -1,19 +1,14 @@
 <div align="center">
 
-<img src="./assets/docs/limusic-github-image.png" alt="Limusic Banner" width="100%">
+# Tin-music
 
-# Limusic
-
-**A native desktop YouTube Music client. Rust + Tauri, ad-free, no Electron.**
+**A modern, fast, and lightweight native desktop client for Navidrome (Subsonic).**  
+*Built with Rust + Tauri 2 + Svelte 5. Zero Electron, zero web bloat.*
 
 <p align="center">
-  <a href="https://github.com/SimoHypers/limusic/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/SimoHypers/limusic/total?style=for-the-badge&label=DOWNLOADS&color=a4c400"></a>
-  <a href="https://github.com/SimoHypers/limusic/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/SimoHypers/limusic?display_name=release&style=for-the-badge&color=a10935"></a>
-  <img alt="License" src="https://img.shields.io/github/license/SimoHypers/limusic?style=for-the-badge&color=1881cc">
-  <a href="https://hosted.weblate.org/engage/limusic/"><img alt="Translation status" src="https://img.shields.io/weblate/progress/limusic?server=https%3A%2F%2Fhosted.weblate.org&style=for-the-badge&label=TRANSLATED&color=6a3fb5"></a>
-  <a href="https://simohypers.github.io/limusic/"><img alt="Website" src="https://img.shields.io/badge/WEBSITE-limusic-e5486e?style=for-the-badge"></a>
-  <a href="https://ko-fi.com/simohypers"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/KO--FI-support-ff5e5b?style=for-the-badge&logo=kofi&logoColor=white"></a>
-  <br>
+  <a href="https://github.com/T1n777/Tin-music/releases/latest"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/T1n777/Tin-music?display_name=release&style=for-the-badge&color=e50914"></a>
+  <img alt="License" src="https://img.shields.io/github/license/T1n777/Tin-music?style=for-the-badge&color=1881cc">
+  <img alt="Arch Linux" src="https://img.shields.io/badge/Arch_Linux-1793D1?style=for-the-badge&logo=arch-linux&logoColor=white">
   <img alt="Linux" src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black">
   <img alt="Windows" src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logoColor=white">
   <img alt="macOS" src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white">
@@ -21,247 +16,139 @@
   <img alt="Rust" src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white">
 </p>
 
-**Limusic** talks directly to YouTube's internal API and plays audio through libmpv: no bundled
-browser runtime, no backend server, no ads in the audio. It started as a desktop rebuild of the
-playback engine behind [Metrolist](https://github.com/mostafaalagamy/Metrolist), an Android
-YouTube Music client, and grew from there.
+**Tin-music** connects directly to your self-hosted [Navidrome](https://www.navidrome.org/) (or any Subsonic-compatible) music server to deliver a snappy, native desktop music experience. Powered by an optimized Rust backend and `libmpv`, it offers bit-perfect playback, offline downloads, real-time audio controls, and scrobbling without the overhead of heavy browser runtimes.
 
 </div>
 
 ---
 
-## Features
+## Highlights
 
-- **Ad-free playback**: streams come straight from YouTube's API, ads never do
-- **Search & browse**: songs, albums, artists, playlists and the YTM home feed, with results previewing as you type
-- **Sign in** with your YouTube Music account: in-app Google login or cookie-paste, several accounts at once with switching between them
-- **Your library**: playlists, liked songs, saved albums and artists, your uploads, and write actions (like, add to playlist, create/edit/delete playlists including cover art, subscribe, save to library)
-- **History**: everything you have played, in YouTube Music's own day buckets
-- **Gapless playback** with loudness normalization, powered by libmpv
-- **Tempo, pitch and reverb**: adjust playback speed and pitch, add reverb with independent dry/wet controls, and save custom presets on this device.
-- **Queue** with radio/automix continuation, drag to reorder, restored across restarts
-- **Synced lyrics**: side panel with auto-scroll and click-to-jump, word by word where the source has the timings, with translations under each line
-- **Music videos**: optional, the video plays where the artwork sits, with the same gapless audio behind it
-- **Mini Player and theater mode**: shrink to a strip that keeps playing, or go fullscreen with cover and lyrics side by side
-- **Local Music**: play your own files, with all metadata still intact
-- **Last.fm scrobbling**: connect once from the title bar, every play is scrobbled
-- **ListenBrainz scrobbling**: paste a user token in the Scrobbling settings, same plays go there too
-- **Discord Rich Presence**: artwork, live progress bar, one click to toggle
-- **OS media keys** and now-playing integration (MPRIS on Linux, SMTC on Windows, plus playback buttons on the Windows taskbar preview)
-- **System tray**: close the window, keep the music; play/pause and skip from the tray, optional start-on-login
-- **Listen Together**: synced listening rooms over a small self-hosted relay
-- **Keyboard and mouse**: `Ctrl+K` searches from anywhere, `Ctrl+H` lists every shortcut, right-click menus throughout, `Ctrl` and the wheel zooms the interface
-- **Eighteen languages**: English, German, Spanish, French, Indonesian, Italian, Japanese, Korean, Polish, Brazilian Portuguese, Romanian, Russian, Tamil, Turkish, Ukrainian, Vietnamese, and Simplified and Traditional Chinese, with more in progress on [Weblate](https://hosted.weblate.org/projects/limusic/)
-- **Self-updating builds** (AppImage on Linux, setup.exe on Windows, .app on macOS)
-- **Make it yours**: accent palettes, custom colors, your own fonts, corner roundness, a custom app icon, and an adaptive theme that recolors the app from the playing cover
-
----
-
-## Screenshots
-
-<table>
-  <tr>
-    <td><img src="website/src/assets/screen-playlist.webp" alt="A playlist in Limusic"></td>
-    <td><img src="website/src/assets/screen-lyrics.webp" alt="Word-by-word synced lyrics"></td>
-  </tr>
-  <tr>
-    <td><img src="website/src/assets/screen-album.webp" alt="An album page, colors adapted to the cover"></td>
-    <td><img src="website/src/assets/screen-video.webp" alt="A music video playing with lyrics alongside"></td>
-  </tr>
-</table>
+- ⚡ **Native Performance**: Built on Tauri 2 and Rust with a reactive Svelte 5 frontend — launches instantly with minimal CPU and memory footprint.
+- 📡 **Full Subsonic & Navidrome API**: Browse your complete library — Artists, Albums, Songs, Playlists, and Starred tracks.
+- 🎚️ **Transcoding Selector**: Switch streaming quality on the fly in Settings (Direct/FLAC lossless, 320 kbps, 256 kbps, or 128 kbps Data Saver).
+- 💾 **Offline Downloads**:
+  - Download individual tracks directly from the `⋯` menu.
+  - Download full albums to `~/Music/Tin-music/<Artist> - <Album>/`.
+  - Download entire playlists to `~/Music/Tin-music/Playlists/<Name>/`.
+  - Bulk library download with automatic deduplication (skips already-downloaded tracks).
+- 🔔 **Sleek Update System**:
+  - Discreet update button in the titlebar next to your profile that lights up with an animated glow when an update is available.
+  - One-time toast notification (no repeated nagging).
+  - One-click update and relaunch.
+- 🎧 **Audiophile Playback via `libmpv`**:
+  - Gapless transitions and loudness normalization.
+  - Real-time tempo and pitch controls with custom room reverb presets.
+- 📜 **Synced Lyrics**: Embedded side panel with synchronized line-by-line and word-by-word scrolling (LRCLIB and more).
+- 📊 **Scrobbling & Presence**:
+  - **Last.fm**: Connect with one click from the title bar; plays scrobble automatically.
+  - **ListenBrainz**: Native token authentication and real-time scrobbles.
+  - **Discord Rich Presence**: Live album art, track details, and elapsed progress.
+- 🖼️ **Mini Player & Theater Mode**: Keep music in a floating compact window or expand to an immersive fullscreen view.
+- 📁 **Local Music Playback**: Play offline audio files directly from your local storage.
+- 🎨 **Adaptive Theming**: Themes that adapt their accent palette dynamically to match the playing album art.
 
 ---
 
-<h2 align="center">Download & Install</h2>
+## Download & Installation
 
-<p align="center">
-  <a href="https://github.com/SimoHypers/limusic/releases/latest">
-    <img src="https://img.shields.io/badge/GitHub_Releases-100000?style=for-the-badge&logo=github&logoColor=white" height="40">
-  </a>
-</p>
+Visit the [GitHub Releases](https://github.com/T1n777/Tin-music/releases/latest) page to download pre-built binaries.
 
-| Platform | File | Notes |
-|---|---|---|
-| Windows | `-setup.exe` | Self-updating |
-| Windows | `.msi` | Plain installer, no auto-update |
-| Linux | `.AppImage` | Self-updating, libmpv bundled. Needs glibc 2.39+ (Ubuntu 24.04+, Debian 13+, Fedora 40+) |
-| Linux (Ubuntu/Debian) | `.deb` | No self-update. Needs Ubuntu 24.04+ / Debian 13+; apt pulls libmpv and webkit2gtk in for you |
-| Linux (Fedora/RHEL) | `.rpm` | Needs `mpv-libs` installed (`sudo dnf install mpv-libs`). No updates, redownload each release |
-| macOS (Apple Silicon) | `.dmg` | Self-updating. Unsigned, so the first launch needs `xattr -dr com.apple.quarantine /Applications/limusic.app` |
-| macOS (Intel) | none | Build from source, see [docs/BUILD-PLATFORMS.md](docs/BUILD-PLATFORMS.md) |
+### Arch Linux / CachyOS / Manjaro / EndeavourOS
 
-Community-maintained repositories, packaged and updated by their maintainers rather than by this project:
-
-| Platform | Source | Notes |
-|---|---|---|
-| Linux (Arch) | [AUR](https://aur.archlinux.org/packages/limusic-bin) | `yay -S limusic-bin`. Maintained by [@xiryuudev](https://github.com/xiryuudev), updates through pacman |
-| Linux (Fedora COPR) | [COPR](https://copr.fedorainfracloud.org/coprs/oguzkarayemis/limusic/) | `sudo dnf copr enable oguzkarayemis/limusic` then `sudo dnf install limusic`. Maintained by [@oguzkarayemis](https://github.com/oguzkarayemis), updates through dnf |
-| Linux (openSUSE Tumbleweed) | [OBS](https://build.opensuse.org/package/show/home:itachi_re/limusic) | `sudo zypper ar -p 100 https://download.opensuse.org/repositories/home:/itachi_re/openSUSE_Tumbleweed/home:itachi_re.repo` then `sudo zypper install limusic`. Maintained by [@itachi-re](https://github.com/itachi-re), updates through zypper. The repo carries the maintainer's other packages too, so `-p 100` keeps it below the distro repos |
-
----
-
-## Scrobbling & Discord
-
-Last.fm lives in the title bar, next to the window controls, and ListenBrainz connects from
-Settings ▸ Scrobbling. Both get the same cleaned-up track (the tab's preview shows what each
-play counts as).
-
-- **Last.fm**: click the Last.fm mark, approve Limusic in the browser tab that
-  opens, and you're connected for good. Tracks scrobble at the halfway point (or
-  four minutes, whichever comes first), which is Last.fm's own rule. Click again
-  to see the account or disconnect.
-- **ListenBrainz**: open the Scrobbling settings, paste the user token from
-  [listenbrainz.org/settings](https://listenbrainz.org/settings/) and connect.
-  Plays submit as `playing_now` on start and one `single` listen at the same
-  halfway-or-four-minutes point. A new MetaBrainz account has to verify its email first, or
-  ListenBrainz turns every listen away (the Scrobbling tab says so).
-- **Discord**: click the Discord mark to toggle Rich Presence. Green dot means
-  it's live. The card shows the track, artist, album art, and a progress bar, and
-  it disappears when you pause.
-
-Building from source? Last.fm needs your own API credentials, and they are not in
-the repo. Get a key at [last.fm/api/account/create](https://www.last.fm/api/account/create)
-and put it in `src-tauri/lastfm.keys`:
-
-```
-LIMUSIC_LASTFM_API_KEY=your_key
-LIMUSIC_LASTFM_API_SECRET=your_secret
-```
-
-Without that file everything else still builds and runs; the Last.fm button just
-reports that it isn't configured.
-
----
-
-## Lyrics
-
-Open the panel with the microphone button in the player bar, next to the queue
-button. It takes the same side of the window as the queue, so opening one closes
-the other.
-
-Lyrics come from [Boidu](https://boidu.dev) first, then
-[LRCLIB](https://lrclib.net), then YouTube Music's own timed lyrics, then
-Netease, QQ Music and Kugou, falling back to plain un-timed text when nobody has
-a synced version. Matching is keyed on the track's exact length, because popular
-songs exist as several cuts and the wrong one drifts a few seconds out. Results
-are cached locally, so replaying a track is instant.
-
-Boidu is the only source with per-word timings, which is what lets a line
-highlight word by word as it's sung. It goes first for that reason, which also
-means it is asked about every track you play. Turn it off in **Settings ->
-Playback -> Word-by-word lyrics** and the other sources still provide
-line-by-line lyrics. Netease additionally supplies translations, shown under
-each line where it has them.
-
-Note that YouTube Music's lyrics are licensed per region and are missing
-entirely in some countries. Where that's the case, LRCLIB does all the work.
-
----
-
-## Listen Together
-
-Synced listening with friends. Everyone streams their own audio from YouTube;
-the room only relays play/pause, seeks, track changes and the queue. One person
-hosts the relay:
+#### Option 1: Native Pacman Package (`.pkg.tar.zst`)
+Download the `.pkg.tar.zst` package from Releases and install via `pacman`:
 
 ```bash
-cargo run -p sync-server        # plain WebSocket on 0.0.0.0:8080
+sudo pacman -U tin-music-1.4.0-1-x86_64.pkg.tar.zst
 ```
 
-Front it with something that terminates TLS (Tailscale Funnel, Cloudflare
-Tunnel), then paste the `wss://` URL into the Listen Together panel in the app.
-Rooms have join codes and the host approves every join and every track
-suggestion.
+#### Option 2: From Source / Local Git Clone
+```bash
+git clone https://github.com/T1n777/Tin-music.git
+cd Tin-music
+./scripts/build-arch.sh
+sudo pacman -U target/release/bundle/arch/tin-music-*.pkg.tar.zst
+```
+
+To update an existing installation from Git at any time:
+```bash
+./scripts/update.sh
+```
+
+#### Option 3: AUR (`tin-music-git`)
+```bash
+yay -S tin-music-git
+```
 
 ---
 
-## Translations
+### Debian / Ubuntu (`.deb`)
 
-Limusic is translated on [Weblate](https://hosted.weblate.org/engage/limusic/),
-who host it free for libre projects.
+Download the `.deb` package and install via `apt`:
 
-<a href="https://hosted.weblate.org/engage/limusic/">
-  <img src="https://hosted.weblate.org/widget/limusic/ui/multi-auto.svg" alt="Translation status">
-</a>
+```bash
+sudo apt install ./Tin-music_1.4.0-rc.4_amd64.deb
+```
 
-English, Spanish, French, Turkish, Brazilian Portuguese and Indonesian ship in
-the app today.
-The badge above shows everything else in flight.
+---
 
-**Translate on Weblate, not in a pull request.** Weblate keeps its own copy of
-the catalogs, so a hand-edited `fr.json` merged here puts the two out of sync
-and the next batch of real translations arrives as a merge conflict. Weblate
-also shows you the English original beside each string, flags translations that
-went stale when the English changed, checks that placeholders like `{count}`
-survived, and opens the pull request for you. Anything untranslated falls back
-to English in the app, so partial work is safe to submit.
+### Linux AppImage (Universal)
 
-`en.json` is the exception: it changes by hand, in whichever pull request
-changes the UI. Switching a finished language on in the picker takes a small
-code change too, see [CONTRIBUTING.md](CONTRIBUTING.md#translations).
+Download the `.AppImage` bundle, make it executable, and run:
+
+```bash
+chmod +x Tin-music_1.4.0-rc.4_amd64.AppImage
+./Tin-music_1.4.0-rc.4_amd64.AppImage
+```
+
+---
+
+## Connecting to Your Navidrome Server
+
+1. Launch **Tin-music**.
+2. Click **Connect** (or the server icon) in the titlebar.
+3. Enter your Navidrome server URL (e.g. `https://music.example.com`), username, and password.
+4. Click **Connect**. Your library will sync and populate immediately.
 
 ---
 
 ## Building from Source
 
-Fedora:
+### Dependencies
 
+#### Arch Linux / CachyOS:
 ```bash
-sudo dnf install mpv-libs mpv-libs-devel webkit2gtk4.1-devel \
-  gcc gcc-c++ make openssl-devel librsvg2-devel
-cd ui && pnpm install && cd ..
-cargo tauri build
+sudo pacman -S --needed base-devel git rust cargo npm mpv gtk3 webkit2gtk-4.1 openssl
 ```
 
-Windows and macOS instructions live in [docs/BUILD-PLATFORMS.md](docs/BUILD-PLATFORMS.md).
+#### Ubuntu / Debian:
+```bash
+sudo apt update
+sudo apt install -y build-essential curl git libmpv-dev libgtk-3-dev libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
 
----
+#### Fedora:
+```bash
+sudo dnf install mpv-libs-devel gtk3-devel webkit2gtk4.1-devel openssl-devel
+```
 
-## How It Works, Briefly
+### Build Instructions
 
-- A pure Rust crate speaks YouTube's InnerTube API, impersonating several
-  official client identities and falling back between them when one fails.
-- YouTube's stream URLs are protected by obfuscated JavaScript (the signature
-  cipher and the `n` parameter) and by BotGuard attestation. Limusic runs that
-  JavaScript where it expects to run, in a real webview, hidden, and never lets
-  any of it touch the UI process.
-- Audio goes through libmpv: gapless transitions, an on-disk cache, and
-  loudness normalization from YouTube's own metadata.
-- The UI is a SvelteKit SPA that only ever talks to the Rust core. It never
-  contacts YouTube itself.
+```bash
+# 1. Clone repository
+git clone https://github.com/T1n777/Tin-music.git
+cd Tin-music
 
----
+# 2. Install UI dependencies
+npm --prefix ui install
 
-## Star History
-
-<a href="https://www.star-history.com/?repos=simohypers%2Flimusic&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=simohypers/limusic&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=simohypers/limusic&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=simohypers/limusic&type=date&legend=top-left" />
- </picture>
-</a>
-
----
-
-## Support
-
-Limusic is free and stays free. If it earned a coffee,
-[ko-fi.com/simohypers](https://ko-fi.com/simohypers) is where to leave one.
-
----
-
-## Disclaimer
-
-This project is not affiliated with, funded, authorized, endorsed by, or in
-any way associated with YouTube, Google LLC, or any of their affiliates and
-subsidiaries.
-
-All trademarks, service marks, and intellectual property rights referenced in
-this project belong to their respective owners.
+# 3. Build release binary and packages
+cargo tauri build --ignore-version-mismatches --no-sign
+```
 
 ---
 
 ## License
 
-[GPL-3.0](LICENSE)
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
