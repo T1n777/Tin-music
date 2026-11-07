@@ -138,6 +138,7 @@ export function hydrate(raw: unknown): Personal {
 		// Shortcuts sat above the arrangement until it became a section of its own; it stays on top.
 		if (order.length && !order.includes('@shortcuts')) order.unshift('@shortcuts');
 	}
+	purgeLegacyYouTube(base);
 	return base;
 }
 
@@ -457,6 +458,57 @@ export function noteRecent(p: Personal, item: BrowseItem, now = Date.now()): voi
 			delete p.recent[id];
 		}
 	}
+}
+
+/** Remove an item from recents by id. Returns true if it was removed. */
+export function removeRecent(p: Personal, id: string): boolean {
+	if (id in p.recent) {
+		delete p.recent[id];
+		return true;
+	}
+	return false;
+}
+
+/**
+ * Purge legacy YouTube Music data from local personalization.
+ * Removes YouTube-specific browse IDs and entries carrying YouTube CDN thumbnails or YouTube titles.
+ */
+export function purgeLegacyYouTube(p: Personal): boolean {
+	let changed = false;
+	const isYt = (id: string, thumb?: string | null, title?: string, subtitle?: string | null) => {
+		if (id === 'VLLM' || id === 'LM' || id === 'FEmusic_liked_videos') {
+			return true;
+		}
+		if (title === 'Liked Music') return true;
+		if (thumb && (thumb.includes('ytimg.com') || thumb.includes('googleusercontent.com') || thumb.includes('ggpht.com'))) {
+			return true;
+		}
+		if (subtitle && (subtitle.includes('12+ Hours') || subtitle.includes('598 Songs'))) {
+			return true;
+		}
+		return false;
+	};
+
+	for (const [id, item] of Object.entries(p.recent)) {
+		if (isYt(id, item.thumbnail, item.title, item.subtitle)) {
+			delete p.recent[id];
+			changed = true;
+		}
+	}
+
+	const pickLen = p.picks.length;
+	p.picks = p.picks.filter((item) => !isYt(item.id, item.thumbnail, item.title, item.subtitle));
+	if (p.picks.length !== pickLen) changed = true;
+
+	const savedLen = p.saved.length;
+	p.saved = p.saved.filter((item) => !isYt(item.id, item.thumbnail, item.title, item.subtitle));
+	if (p.saved.length !== savedLen) changed = true;
+
+	const pinLen = p.pins.length;
+	p.pins = p.pins.filter((id) => id !== 'VLLM' && id !== 'LM' && id !== 'FEmusic_liked_videos');
+	if (p.pins.length !== pinLen) changed = true;
+
+	return changed;
 }
 
 /** The most recently played-from playlists/albums/artists, newest first. */

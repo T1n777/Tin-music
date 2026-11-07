@@ -26,7 +26,8 @@
 		Share08Icon,
 		PreferenceVerticalIcon,
 		PencilEdit02Icon,
-		Download01Icon
+		Download01Icon,
+		Cancel01Icon
 	} from '@hugeicons/core-free-icons';
 	import * as api from '$lib/api';
 	import type { SongItem } from '$lib/api';
@@ -47,6 +48,7 @@
 		prefs,
 		ratingOf,
 		removePick,
+		removeRecent,
 		savedIn,
 		toast,
 		startRadio,
@@ -360,6 +362,15 @@
 			<HugeiconsIcon icon={DashboardSquare02Icon} class="h-4 w-4" />
 			{isPick ? t('home.remove_shortcut') : t('home.add_shortcut')}
 		</button>
+		{#if personal.recent[song.video_id]}
+			<button
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10"
+				onclick={(e) => run(e, () => removeRecent(song.video_id))}
+			>
+				<HugeiconsIcon icon={Cancel01Icon} class="h-4 w-4" />
+				{t('home.remove_from_recents')}
+			</button>
+		{/if}
 		{#if !isLocal}
 			<button
 				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"

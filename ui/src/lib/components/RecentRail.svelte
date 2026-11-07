@@ -13,7 +13,8 @@
 		MusicNote01Icon,
 		UserIcon,
 		ListRestartIcon,
-		ArrowTurnBackwardIcon
+		ArrowTurnBackwardIcon,
+		Cancel01Icon
 	} from '@hugeicons/core-free-icons';
 	import SectionHeading from './SectionHeading.svelte';
 	import { ON_REPEAT_ID } from '$lib/api';
@@ -22,6 +23,7 @@
 	import { setDragItem } from '$lib/dnd';
 	import { openItem, playItem } from '$lib/browse';
 	import { t } from '$lib/i18n.svelte';
+	import { removeRecent } from '$lib/player.svelte';
 	import ItemMenu from './ItemMenu.svelte';
 
 	let { items }: { items: BrowseItem[] } = $props();
@@ -116,6 +118,18 @@
 						)}
 					</div>
 				</div>
+				<button
+					type="button"
+					class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover/row:opacity-100"
+					title={t('home.remove_from_recents')}
+					aria-label={t('home.remove_from_recents')}
+					onclick={(e) => {
+						e.stopPropagation();
+						removeRecent(item.id);
+					}}
+				>
+					<HugeiconsIcon icon={Cancel01Icon} class="h-4 w-4" />
+				</button>
 				<ItemMenu
 					{item}
 					triggerClass="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"

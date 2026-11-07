@@ -28,8 +28,10 @@ import {
 	MAX_SEARCHES,
 	orderLibrary,
 	placePick,
+	purgeLegacyYouTube,
 	recentItems,
 	removePick,
+	removeRecent,
 	resetHome,
 	seedPick,
 	togglePin,
@@ -183,6 +185,26 @@ const range = (n: number, prefix: string) => Array.from({ length: n }, (_, i) =>
 	noteRecent(p, item('c'), 200);
 	ok(ids(recentItems(p)).join() === 'b,c,a', 'newest played-from comes first');
 	ok(ids(recentItems(p, 2)).join() === 'b,c', 'n caps the result');
+	ok(removeRecent(p, 'b') === true, 'removeRecent removes item and returns true');
+	ok(removeRecent(p, 'b') === false, 'removeRecent returns false if not found');
+	ok(ids(recentItems(p)).join() === 'c,a', 'item is no longer in recents');
+}
+
+// --- purgeLegacyYouTube removes legacy youtube entries -----------------------------------------
+{
+	const p = empty();
+	p.recent['VLLM'] = { ...item('VLLM'), title: 'Liked Music', at: 100 };
+	p.recent['yt-thumb'] = { ...item('yt-thumb'), thumbnail: 'https://i.ytimg.com/vi/abc/hqdefault.jpg', at: 120 };
+	p.recent['al-123'] = { ...item('al-123'), title: 'Album 123', at: 200 };
+	p.picks.push({ ...item('VLLM'), title: 'Liked Music', lastUsedAt: 100 });
+	p.pins.push('VLLM');
+	p.pins.push('al-123');
+	ok(purgeLegacyYouTube(p) === true, 'purgeLegacyYouTube cleans yt items');
+	ok(p.recent['VLLM'] === undefined, 'VLLM removed from recent');
+	ok(p.recent['yt-thumb'] === undefined, 'yt-thumb removed from recent');
+	ok(p.recent['al-123'] !== undefined, 'al-123 preserved in recent');
+	ok(p.picks.length === 0, 'VLLM removed from picks');
+	ok(p.pins.length === 1 && p.pins[0] === 'al-123', 'pins cleaned of VLLM');
 }
 
 // --- interleave dedupes across lists ------------------------------------------------------------

@@ -523,6 +523,9 @@ export const personal = $state<Personal>(pl.empty());
 if (browser) {
 	try {
 		Object.assign(personal, pl.hydrate(JSON.parse(localStorage.getItem(PERSONAL_KEY) ?? 'null')));
+		if (pl.purgeLegacyYouTube(personal)) {
+			savePersonal();
+		}
 	} catch {
 		// Unreadable blob — start clean rather than break startup.
 	}
@@ -554,6 +557,13 @@ export function placePick(item: BrowseItem, beforeId: string | null) {
 export function removePick(id: string) {
 	pl.removePick(personal, id);
 	savePersonal();
+}
+
+export function removeRecent(id: string) {
+	if (pl.removeRecent(personal, id)) {
+		savePersonal();
+		toast.success(t('toasts.removed_from_recents'));
+	}
 }
 
 /** How many songs On Repeat needs before it's worth a tile on the grid. */
