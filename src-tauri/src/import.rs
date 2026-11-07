@@ -304,12 +304,14 @@ static BOT_CHECK_AT: AtomicI64 = AtomicI64::new(0);
 /// too. The reason comes in the app's language; these words cover English, German, Spanish,
 /// Italian, Dutch, French, Portuguese and Russian. The import's own 429/403 check is the guard
 /// that doesn't depend on wording.
+#[allow(dead_code)]
 pub fn note_playability(reason: Option<&str>) {
     if reason.is_some_and(is_bot_check) {
         BOT_CHECK_AT.store(now_secs(), Ordering::Relaxed);
     }
 }
 
+#[allow(dead_code)]
 fn is_bot_check(reason: &str) -> bool {
     reason
         .to_lowercase()

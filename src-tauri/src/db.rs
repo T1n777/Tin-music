@@ -279,23 +279,27 @@ impl Db {
         let _ = conn.execute("ALTER TABLE local_playlist_tracks ADD COLUMN pos INTEGER", []);
         let _ = conn.execute("UPDATE local_playlist_tracks SET pos = id WHERE pos IS NULL", []);
 
-        // Purge legacy YouTube Music data so listening stats, accounts, and playlists only reflect Navidrome/local music.
-        let _ = conn.execute_batch(
-            r#"
-            DELETE FROM listens WHERE video_id IN (
-                SELECT video_id FROM listen_songs WHERE song_json LIKE '%i.ytimg.com%' OR song_json LIKE '%MPRE%'
-            ) OR (length(video_id) = 11 AND video_id NOT LIKE 'LOCAL:%');
-            DELETE FROM listen_songs WHERE song_json LIKE '%i.ytimg.com%' OR song_json LIKE '%MPRE%'
-                OR (length(video_id) = 11 AND video_id NOT LIKE 'LOCAL:%');
-            DELETE FROM accounts;
-            DELETE FROM settings WHERE key IN (
-                'session_cookie', 'visitor_data', 'selected_identity_json', 'account_json',
-                'active_account', 'potoken_session', 'playlist_index_synced_at_v2'
+        // Purge legacy YouTube Music data once Navidrome is connected, so listening stats, accounts,
+        // and playlists only reflect Navidrome/local music without breaking existing offline migrations.
+        let has_navidrome = conn.query_row("SELECT 1 FROM settings WHERE key = 'navidrome_server_url'", [], |_| Ok(())).is_ok();
+        if has_navidrome && conn.execute("INSERT INTO settings(key, value) VALUES('navidrome_purge_v1', '1')", []).is_ok() {
+            let _ = conn.execute_batch(
+                r#"
+                DELETE FROM listens WHERE video_id IN (
+                    SELECT video_id FROM listen_songs WHERE song_json LIKE '%i.ytimg.com%' OR song_json LIKE '%MPRE%'
+                ) OR (length(video_id) = 11 AND video_id NOT LIKE 'LOCAL:%');
+                DELETE FROM listen_songs WHERE song_json LIKE '%i.ytimg.com%' OR song_json LIKE '%MPRE%'
+                    OR (length(video_id) = 11 AND video_id NOT LIKE 'LOCAL:%');
+                DELETE FROM accounts;
+                DELETE FROM settings WHERE key IN (
+                    'session_cookie', 'visitor_data', 'selected_identity_json', 'account_json',
+                    'active_account', 'potoken_session', 'playlist_index_synced_at_v2'
+                );
+                DELETE FROM playlist_track;
+                DELETE FROM stream_url_cache;
+                "#
             );
-            DELETE FROM playlist_track;
-            DELETE FROM stream_url_cache;
-            "#
-        );
+        }
         // And the disc number (issue #315), refilled the same way.
         let _ = conn
             .execute("ALTER TABLE local_tracks ADD COLUMN disc_no INTEGER NOT NULL DEFAULT 0", []);

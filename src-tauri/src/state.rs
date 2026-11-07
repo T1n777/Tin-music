@@ -4601,7 +4601,7 @@ fn merge_radio(
 /// stops both call sites before they skip anything, because neither says anything about the track.
 fn skip_reason(e: &ResolveError) -> &'static str {
     match e {
-        ResolveError::UploadUnavailable(_) | ResolveError::SignInRequired(_) => "sign-in needed",
+        ResolveError::SignInRequired(_) => "sign-in needed",
         _ => "unavailable",
     }
 }

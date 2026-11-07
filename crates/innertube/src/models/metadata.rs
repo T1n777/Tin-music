@@ -6,7 +6,7 @@
 //! pull only the handful of fields the playback path uses. Targeted and robust to the tree
 //! moving around (fixture reality wins over spec — see plan risks).
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 
 pub use subsonic::ui_models::{ArtistRun, LibraryToggle, Rating, Segment, SongItem, SongLibraryState};

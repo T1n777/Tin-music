@@ -37,14 +37,11 @@ pub struct PlaybackPing {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
-    #[error("Could not resolve stream for {0}")]
-    AllClientsFailed(String),
-    #[error("This track could not be played ({0})")]
-    UploadUnavailable(String),
     #[error("Navidrome server connection required. Connect from Settings.")]
     SignInRequired(String),
     #[error("This file is no longer on your disk: {0}")]
     LocalMissing(String),
+    #[allow(dead_code)]
     #[error("Could not reach Navidrome server ({0})")]
     Unreachable(String),
 }
