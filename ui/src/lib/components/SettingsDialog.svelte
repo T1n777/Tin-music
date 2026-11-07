@@ -232,7 +232,7 @@
 				version,
 				system
 			});
-			await api.openExternal(`https://github.com/SimoHypers/limusic/issues/new?${q}`);
+			await api.openExternal(`https://github.com/T1n777/Tin-music/issues/new?${q}`);
 		} catch (e) {
 			diagError = String(e);
 		}

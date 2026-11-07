@@ -64,7 +64,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/SimoHypers/limusic/releases/latest/download/latest.json"
+        "https://github.com/T1n777/Tin-music/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk0MENDMzA1NUFGMDI0NTQKUldSVUpQQmFCY01NbENPbW9XOTRvVU9YQ2lCQytOU2RyeDhHNFhkWHlNc1dITkFmbkd1ZTBlM1gK",
       "windows": {

@@ -322,38 +322,7 @@
 	<ImportDialog />
 	<ServerLoginDialog />
 
-	<!-- The two notification banners below run at z-[100]. Dialogs and menus sit at z-50 and portal to
-	     <body>, so a z-50 banner loses the tie on DOM order and hides behind an open modal. The update
-	     banner also needs pointer-events-auto: an open dialog sets `pointer-events: none` on <body>,
-	     so without it the banner shows above the modal but its buttons can't be clicked. -->
-	{#if updateState.available}
-		<div
-			transition:fly={{ y: 16, duration: 220, easing: cubicOut }}
-			class="pointer-events-auto fixed bottom-24 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-card px-4 py-2 text-sm shadow-lg"
-		>
-			<span>{availableMessage(updateState.available)}</span>
-			{#if updateState.canInstall}
-				<Button size="sm" onclick={installUpdate} disabled={updateState.installing}>
-					{updateState.installing ? t('common.loading') : t('settings.about.install_update')}
-				</Button>
-			{:else}
-				<!-- Packaged build (.rpm, AUR): the updater can only rewrite an AppImage, so send them
-				     to the releases page and let their package manager do it. -->
-				<Button size="sm" onclick={openDownloadPage}>{t('settings.about.download_page')}</Button>
-			{/if}
-			{#if !updateState.installing}
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					class="-mr-2 text-muted-foreground hover:text-foreground"
-					aria-label={t('common.close')}
-					onclick={() => (updateState.available = null)}
-				>
-					<HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-				</Button>
-			{/if}
-		</div>
-	{/if}
+	<!-- Dialogs and modals sit at z-50 and portal to <body>. -->
 
 	{#if ui.toast}
 		{@const t = ui.toast}

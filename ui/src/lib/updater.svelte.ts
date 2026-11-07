@@ -11,10 +11,12 @@ import { canSelfUpdate, checkBetaUpdate, getSettings, openExternal, releaseNotes
 import { isNewer, isPrerelease } from './version';
 import { getVersion } from '@tauri-apps/api/app';
 
-const RELEASES_URL = 'https://github.com/SimoHypers/limusic/releases/latest';
+const RELEASES_URL = 'https://github.com/T1n777/Tin-music/releases/latest';
 
 /** How often the quiet check repeats while the app stays open. */
 export const QUIET_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+let notifiedVersion: string | null = null;
 
 export const updateState = $state({
 	// Set when Latest differs from this build. `rollback` is true when Latest is OLDER than this
@@ -84,6 +86,10 @@ async function look(): Promise<boolean> {
 		if (isPrerelease(current) && !isNewer(latest, current)) return false;
 		updateState.canInstall = false;
 		updateState.available = { version: latest, rollback: isNewer(current, latest) };
+		if (notifiedVersion !== latest) {
+			notifiedVersion = latest;
+			toast.info(availableMessage(updateState.available));
+		}
 		return true;
 	}
 	if (u) {
@@ -93,6 +99,10 @@ async function look(): Promise<boolean> {
 		// "Update now" on a packaged build does not.
 		updateState.canInstall = await canSelfUpdate().catch(() => false);
 		updateState.available = { version: u.version, rollback: isNewer(u.currentVersion, u.version) };
+		if (notifiedVersion !== u.version) {
+			notifiedVersion = u.version;
+			toast.info(availableMessage(updateState.available));
+		}
 		return true;
 	}
 	return false;
@@ -175,5 +185,29 @@ export async function installUpdate() {
 	} catch (e) {
 		toast.error(t('toasts.update_failed', { error: String(e) }));
 		updateState.installing = false;
+	}
+}
+
+/** User clicked the update button next to the profile. Updates the app or checks if up to date. */
+export async function triggerUpdate() {
+	if (updateState.installing) return;
+	if (updateState.available) {
+		if (updateState.canInstall) {
+			toast.info(`Updating to v${updateState.available.version}...`);
+			await installUpdate();
+		} else {
+			toast.info(`Update v${updateState.available.version} available. Opening download page...`);
+			openDownloadPage();
+		}
+	} else {
+		updateState.checking = true;
+		try {
+			const res = await checkForUpdatesInteractive();
+			if (!updateState.available) {
+				toast.success(res.message);
+			}
+		} finally {
+			updateState.checking = false;
+		}
 	}
 }

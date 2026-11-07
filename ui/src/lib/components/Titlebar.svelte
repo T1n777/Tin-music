@@ -25,11 +25,13 @@
 		HotspotOfflineIcon,
 		UserGroup02Icon,
 		Link04Icon,
-		Settings02Icon
+		Settings02Icon,
+		Download01Icon
 	} from '@hugeicons/core-free-icons';
 	import LastFmIcon from './LastFmIcon.svelte';
 	import DiscordIcon from './DiscordIcon.svelte';
 	import AccountMenu from './AccountMenu.svelte';
+	import { updateState, triggerUpdate } from '$lib/updater.svelte';
 	import { appIcon } from '$lib/appicon.svelte';
 	import * as api from '$lib/api';
 	import { openMiniPlayer, playback, prefs, refreshView, toast, ui } from '$lib/player.svelte';
@@ -188,6 +190,41 @@
 		<!-- Account first, then the integrations, then the window controls. The drag region lives on
 		     <header> only, so these children are ordinary buttons — don't add the attribute here. -->
 		<AccountMenu />
+
+		<!-- Update Button: stays subtle when up to date, lights up with glowing badge when update is available -->
+		<button
+			onclick={triggerUpdate}
+			disabled={updateState.installing}
+			class="group relative flex h-6.5 cursor-pointer items-center gap-1.5 rounded-full px-2 text-xs font-semibold transition-all duration-300
+				{updateState.available
+					? 'bg-primary/20 text-primary border border-primary/40 shadow-[0_0_12px_rgba(235,0,41,0.35)] hover:bg-primary/30 hover:border-primary/60'
+					: 'text-muted-foreground hover:bg-accent/10 hover:text-foreground'}"
+			title={updateState.installing
+				? 'Installing update...'
+				: updateState.checking
+					? 'Checking for updates...'
+					: updateState.available
+						? `Update available (v${updateState.available.version}) — Click to install`
+						: 'Check for updates'}
+			aria-label="Update application"
+		>
+			{#if updateState.installing || updateState.checking}
+				<HugeiconsIcon icon={Loading03Icon} class="h-3.5 w-3.5 animate-spin {updateState.available ? 'text-primary' : ''}" />
+				{#if updateState.installing}
+					<span class="text-[11px] font-medium tracking-tight">Updating...</span>
+				{/if}
+			{:else if updateState.available}
+				<span class="relative flex h-2 w-2">
+					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+					<span class="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+				</span>
+				<HugeiconsIcon icon={Download01Icon} class="h-3.5 w-3.5 text-primary" strokeWidth={2.5} />
+				<span class="text-[11px] font-bold tracking-tight">Update</span>
+			{:else}
+				<HugeiconsIcon icon={Download01Icon} class="h-3.5 w-3.5" />
+			{/if}
+		</button>
+
 		<div class="mx-1.5 h-4 w-px bg-border"></div>
 
 		<!-- Paste a YouTube Music link and go to it: the only way into a playlist that is shared by

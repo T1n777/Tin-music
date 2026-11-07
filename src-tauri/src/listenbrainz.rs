@@ -22,7 +22,7 @@ use crate::state::AppState;
 
 const API_ROOT: &str = "https://api.listenbrainz.org";
 const USER_AGENT: &str =
-    concat!("Limusic/", env!("CARGO_PKG_VERSION"), " (https://github.com/SimoHypers/limusic)");
+    concat!("Limusic/", env!("CARGO_PKG_VERSION"), " (https://github.com/T1n777/Tin-music)");
 
 /// The `track_metadata` object for one listen. `video_id` feeds `origin_url` for YouTube tracks
 /// (and picks the music service); local files carry no URL.

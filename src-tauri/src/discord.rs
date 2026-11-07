@@ -59,7 +59,7 @@ const APP_ID: &str = "1525891596804161727";
 const SONG_URL: &str = "https://music.youtube.com/watch?v=";
 const ARTIST_URL: &str = "https://music.youtube.com/channel/";
 const ALBUM_URL: &str = "https://music.youtube.com/browse/";
-const REPO_URL: &str = "https://github.com/SimoHypers/limusic";
+const REPO_URL: &str = "https://github.com/T1n777/Tin-music";
 /// The small "provider badge" Discord draws in the corner of the artwork, the way Spotify's and
 /// Apple Music's cards do (issue #226). Served straight from the repo so there is no asset to
 /// register in the Discord developer portal and nothing to keep in sync at release time; if this
