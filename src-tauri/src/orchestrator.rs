@@ -4,8 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-pub use innertube::AudioQuality;
-
 pub fn is_youtube_stream(_url: &str) -> bool {
     false
 }
@@ -80,15 +78,9 @@ impl Orchestrator {
         &self,
         video_id: &str,
         _is_upload: bool,
-        quality: AudioQuality,
+        max_bitrate: Option<u32>,
         _disabled: &HashSet<String>,
     ) -> Result<PlaybackData, ResolveError> {
-        let max_bitrate = match quality {
-            AudioQuality::Low => Some(128),
-            AudioQuality::Auto => None,
-            AudioQuality::High => None,
-        };
-
         let client = {
             let guard = self.subsonic.read().await;
             guard.clone()

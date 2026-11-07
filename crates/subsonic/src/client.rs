@@ -172,6 +172,42 @@ impl SubsonicClient {
         url.to_string()
     }
 
+    pub fn download_url(&self, id: &str) -> String {
+        let Ok(mut url) = self.endpoint_url("download") else {
+            return String::new();
+        };
+        {
+            let mut q = url.query_pairs_mut();
+            q.append_pair("id", id);
+        }
+        url.to_string()
+    }
+
+    pub async fn download_song_file(&self, id: &str) -> Result<(String, Vec<u8>), Error> {
+        let url = self.download_url(id);
+        let resp = self.http.get(&url).send().await?.error_for_status()?;
+        let filename = resp
+            .headers()
+            .get("content-disposition")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|cd| {
+                if let Some(pos) = cd.find("filename=") {
+                    let rest = &cd[pos + 9..];
+                    let clean = rest.trim_matches('"').trim();
+                    let end = clean.find('"').or_else(|| clean.find(';')).unwrap_or(clean.len());
+                    let raw_name = &clean[..end];
+                    let sanitized = raw_name.replace(['/', '\\'], "_");
+                    Some(sanitized)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| format!("{id}.audio"));
+
+        let bytes = resp.bytes().await?.to_vec();
+        Ok((filename, bytes))
+    }
+
     // --- Endpoints ---
 
     pub async fn ping(&self) -> Result<ServerInfo, Error> {

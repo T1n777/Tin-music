@@ -25,7 +25,8 @@
 		DashboardSquare02Icon,
 		Share08Icon,
 		PreferenceVerticalIcon,
-		PencilEdit02Icon
+		PencilEdit02Icon,
+		Download01Icon
 	} from '@hugeicons/core-free-icons';
 	import * as api from '$lib/api';
 	import type { SongItem } from '$lib/api';
@@ -374,6 +375,21 @@
 					)}
 			>
 				<HugeiconsIcon icon={Share08Icon} class="h-4 w-4" /> {t('player.share')}
+			</button>
+			<button
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				onclick={(e) =>
+					run(e, async () => {
+						try {
+							toast.info(`Downloading "${song.title}"...`);
+							const path = await api.downloadSong(song.video_id);
+							toast.success(`Downloaded to ${path}`);
+						} catch (err) {
+							toast.error(`Download failed: ${err}`);
+						}
+					})}
+			>
+				<HugeiconsIcon icon={Download01Icon} class="h-4 w-4" /> Download track
 			</button>
 		{/if}
 		<!-- #404: fix how this track scrobbles, for good. Opens the Scrobbling tab on it, where the

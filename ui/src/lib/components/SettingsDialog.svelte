@@ -250,7 +250,7 @@
 		loaded = true;
 	}
 
-	const quality = $derived(settings.quality ?? 'HIGH');
+	const quality = $derived(settings.quality ?? 'DIRECT');
 	const historyOn = $derived(settings.enable_history !== 'false');
 	// On unless turned off: loudness matching is what YTM does, and it's what most people want.
 	// Off gives the untouched master, limiter included (#298, #300).
@@ -304,9 +304,10 @@
 	);
 
 	const QUALITIES = [
-		{ id: 'LOW', key: 'settings.playback.quality_low' },
-		{ id: 'AUTO', key: 'settings.playback.quality_auto' },
-		{ id: 'HIGH', key: 'settings.playback.quality_high' }
+		{ id: 'DIRECT', key: 'settings.playback.quality_direct' },
+		{ id: '320', key: 'settings.playback.quality_320' },
+		{ id: '256', key: 'settings.playback.quality_256' },
+		{ id: '128', key: 'settings.playback.quality_128' }
 	] as const;
 
 	async function setQuality(q: string) {

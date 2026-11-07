@@ -14,6 +14,7 @@
         Share08Icon,
         BookmarkAdd02Icon,
         BookmarkCheck02Icon,
+        Download01Icon,
     } from "@hugeicons/core-free-icons";
     import TrackRow from "$lib/components/TrackRow.svelte";
     import TrackColumns, { chosen } from "$lib/components/TrackColumns.svelte";
@@ -212,6 +213,22 @@
         openAddManyToPlaylist(album.items);
     }
 
+    let downloadingAlbum = $state(false);
+    async function downloadThisAlbum() {
+        if (!album?.items.length || downloadingAlbum) return;
+        downloadingAlbum = true;
+        menuOpen = false;
+        toast.info(`Downloading album "${album.title ?? ''}" (${album.items.length} tracks)...`);
+        try {
+            const count = await api.downloadAlbum(id);
+            toast.success(`Downloaded ${count} tracks to ~/Music/Tin-music/`);
+        } catch (e) {
+            toast.error(`Download failed: ${e}`);
+        } finally {
+            downloadingAlbum = false;
+        }
+    }
+
     // A shelf's "See all" opens the same grid route the artist page uses.
     function showMore(s: { title: string; moreBrowseId?: string; moreParams?: string }) {
         const q = new URLSearchParams({ id: s.moreBrowseId!, title: s.title });
@@ -377,6 +394,15 @@
                         />
                         {inLibrary ? t("library.in_library") : t("library.save_to_library")}
                     </button>
+                    <button
+                        class="flex cursor-pointer items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-semibold transition hover:bg-accent/10 disabled:opacity-50"
+                        onclick={downloadThisAlbum}
+                        disabled={downloadingAlbum || !album.items.length}
+                        title="Download album to local disk"
+                    >
+                        <HugeiconsIcon icon={Download01Icon} class="h-4 w-4" />
+                        {downloadingAlbum ? "Downloading..." : "Download"}
+                    </button>
                 {/if}
                 <TrackSelectButton
                     {selection}
@@ -463,6 +489,16 @@
                             /> {t("home.add_shortcut")}
                         </button>
                         {#if !isLocal}
+                            <button
+                                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+                                onclick={downloadThisAlbum}
+                                disabled={downloadingAlbum}
+                            >
+                                <HugeiconsIcon
+                                    icon={Download01Icon}
+                                    class="h-4 w-4"
+                                /> Download album
+                            </button>
                             <button
                                 class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
                                 onclick={() => {

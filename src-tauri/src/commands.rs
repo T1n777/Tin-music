@@ -2894,6 +2894,57 @@ pub async fn navidrome_scan_library(state: St<'_>) -> Result<(), String> {
     Ok(())
 }
 
+fn sanitize_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '\0') { '_' } else { c })
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+#[tauri::command]
+pub async fn download_song(app: tauri::AppHandle, state: St<'_>, video_id: String) -> Result<String, String> {
+    let client = state.subsonic_client().await?;
+    let (filename, bytes) = client.download_song_file(&video_id).await.map_err(|e| e.to_string())?;
+
+    let base = app.path().audio_dir().ok()
+        .or_else(|| app.path().download_dir().ok())
+        .or_else(|| std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Music")))
+        .unwrap_or_else(|| std::env::temp_dir());
+
+    let target_dir = base.join("Tin-music");
+    std::fs::create_dir_all(&target_dir).map_err(|e| format!("Could not create download folder: {e}"))?;
+    let dest = target_dir.join(&filename);
+    tokio::fs::write(&dest, &bytes).await.map_err(|e| format!("Could not write {}: {e}", dest.display()))?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn download_album(app: tauri::AppHandle, state: St<'_>, album_id: String) -> Result<usize, String> {
+    let client = state.subsonic_client().await?;
+    let album = client.get_album(&album_id).await.map_err(|e| e.to_string())?;
+
+    let base = app.path().audio_dir().ok()
+        .or_else(|| app.path().download_dir().ok())
+        .or_else(|| std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Music")))
+        .unwrap_or_else(|| std::env::temp_dir());
+
+    let folder_name = sanitize_filename(&format!("{} - {}", album.artist.as_deref().unwrap_or("Unknown Artist"), album.title.as_deref().unwrap_or("Unknown Album")));
+    let target_dir = base.join("Tin-music").join(folder_name);
+    std::fs::create_dir_all(&target_dir).map_err(|e| format!("Could not create folder: {e}"))?;
+
+    let mut count = 0;
+    for song in &album.items {
+        if let Ok((filename, bytes)) = client.download_song_file(&song.video_id).await {
+            let dest = target_dir.join(&filename);
+            if tokio::fs::write(&dest, &bytes).await.is_ok() {
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

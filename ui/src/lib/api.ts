@@ -1375,3 +1375,9 @@ export const navidromeDisconnect = () =>
 
 export const navidromeScanLibrary = () =>
 	invoke<void>('navidrome_scan_library');
+
+export const downloadSong = (videoId: string) =>
+	invoke<string>('download_song', { videoId });
+
+export const downloadAlbum = (albumId: string) =>
+	invoke<number>('download_album', { albumId });

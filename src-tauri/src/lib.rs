@@ -1211,6 +1211,8 @@ pub fn run() {
             commands::navidrome_status,
             commands::navidrome_disconnect,
             commands::navidrome_scan_library,
+            commands::download_song,
+            commands::download_album,
         ]))
         .on_window_event(|window, event| {
             // Close-to-tray: ✕ hides the main window and playback keeps running; real quit is

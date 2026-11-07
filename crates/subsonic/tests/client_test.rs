@@ -122,6 +122,11 @@ fn test_stream_and_cover_url_generation() {
     assert!(cover_url.contains("http://example.com:4533/rest/getCoverArt"));
     assert!(cover_url.contains("id=cover456"));
     assert!(cover_url.contains("size=500"));
+
+    let download_url = client.download_url("song123");
+    assert!(download_url.contains("http://example.com:4533/rest/download"));
+    assert!(download_url.contains("id=song123"));
+    assert!(download_url.contains("u=alice"));
 }
 
 #[test]

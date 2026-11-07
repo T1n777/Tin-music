@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use innertube::{
-    AccountIdentity, AccountInfo, AudioQuality, BlockList, Clients, InnerTube, SongItem,
+    AccountIdentity, AccountInfo, BlockList, Clients, InnerTube, SongItem,
     MAIN_CLIENT,
 };
 use listen_protocol::{Playback, PlaybackKind, Track};
@@ -624,11 +624,12 @@ impl AppState {
         }
     }
 
-    fn quality(&self) -> AudioQuality {
+    pub fn max_bitrate(&self) -> Option<u32> {
         match self.db.get_setting("quality").as_deref() {
-            Some("LOW") => AudioQuality::Low,
-            Some("AUTO") => AudioQuality::Auto,
-            _ => AudioQuality::High,
+            Some("128") | Some("LOW") => Some(128),
+            Some("256") => Some(256),
+            Some("320") => Some(320),
+            Some("DIRECT") | Some("HIGH") | Some("AUTO") | _ => None,
         }
     }
 
@@ -1298,7 +1299,7 @@ impl AppState {
         }
         let data = self
             .orchestrator
-            .resolve(video_id, is_upload, self.quality(), &self.disabled_clients())
+            .resolve(video_id, is_upload, self.max_bitrate(), &self.disabled_clients())
             .await?;
         // Never cache rustypipe URLs: googlevideo serves them only for bounded-Range requests,
         // which mpv doesn't send → LOADING_FAILED(-13). Caching one poisons the videoId for ~6h.
