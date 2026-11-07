@@ -1,0 +1,10 @@
+[Desktop Entry]
+Categories=AudioVideo;Audio;Music;
+Comment=Tin-music — modern Navidrome music client
+Exec=tin-music %U
+StartupWMClass=limusic-app
+Icon=tin-music
+Name=Tin-music
+Terminal=false
+Type=Application
+MimeType=x-scheme-handler/tin-music;
